@@ -104,10 +104,11 @@ package databaseclasses
 		 * also updates database and calls bluetoothservce.forgetdevice
 		 */
 		public static function forgetBlueToothDevice():void {
+			myTrace("in forgetBlueToothDevice");
 			_address = "";
 			_name = "";
 			Database.updateBlueToothDeviceSynchronous("", "", (new Date()).valueOf());
-			BluetoothService.forgetBlueToothDevice();
+			BluetoothService.forgetActiveBluetoothPeripheral();
 		}
 		
 		/**
@@ -115,6 +116,8 @@ package databaseclasses
 		 * It will look at the address and if it's different from "" then returns true 
 		 */
 		public static function known():Boolean {
+			if (_address == null)
+				return false;
 			return (_address != "");
 		}
 		
@@ -122,6 +125,47 @@ package databaseclasses
 			instance.lastModifiedTimestamp = newtimestamp;
 		}
 		
+		/**
+		 * True for xdrip or xbridge connecting to Dexcom G4
+		 */
+		public static function isDexcomG4():Boolean {
+			return (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_PERIPHERAL_TYPE).toUpperCase() == "G4");
+		}
+		
+		public static function isDexcomG5():Boolean {
+			return (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_PERIPHERAL_TYPE).toUpperCase() == "G5");
+		}
+		
+		public static function isBlueReader():Boolean {
+			return (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_PERIPHERAL_TYPE).toUpperCase() == "BLUEREADER");
+		}
+		
+		public static function isBluKon():Boolean {
+			return (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_PERIPHERAL_TYPE).toUpperCase() == "BLUKON" ||
+				CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_PERIPHERAL_TYPE).toUpperCase() == "BLUCON");
+		}
+		
+		public static function isLimitter():Boolean {
+			return (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_PERIPHERAL_TYPE).toUpperCase() == "LIMITTER");
+		}
+
+		/**
+		 * for type BlueReader, Limitter, BluKon, ie devices that transmit FSL sensor data<br>
+		 * important for calibration
+		 *  
+		 */
+		public static function isTypeLimitter():Boolean {
+			return (isBlueReader() || isBluKon() || isLimitter());
+		}
+		
+		/**
+		 * if true, then scanning can start as soon as transmitter id is chosen. For the moment this is only the case for Dexcom G5 and Blukon<br>
+		 * For others like xdrip, bluereader, etc... scanning can only start if user initiates it 
+		 */
+		public static function alwaysScan():Boolean {
+			return (isDexcomG5() || isBluKon()); 
+		}
+
 		/**
 		 * if name contains BRIDGE (case insensitive) then returns true<br>
 		 * otherwise false<br><br>
@@ -132,15 +176,31 @@ package databaseclasses
 			return _name.toUpperCase().indexOf("BRIDGE") > -1;
 		}
 		
-		public static function isLimitter():Boolean {
-			var returnValue:Boolean = _name.toUpperCase().indexOf("LIMITTER") > -1 || _name.toUpperCase().indexOf("BLUEREADER") > -1;
-			if (returnValue)
-				myTrace("in isLimitter, it's a limitter (or bluereader)");
-			return (returnValue);
+		public static function needsTransmitterId():Boolean {
+			return (isDexcomG5() || isDexcomG4() || isBluKon());
 		}
 		
+		public static function transmitterIdKnown():Boolean {
+			return (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_TRANSMITTER_ID) != "00000");
+		}
+		
+		public static function deviceType():String {
+			if (isDexcomG4()) 
+				return "G4";
+			if (isDexcomG5())
+				return "G5";
+			if (isBlueReader())
+				return "BlueReader";
+			if (isBluKon())
+				return "BluKon";
+			if (isLimitter())
+				return "Limitter";
+			return "unknown";
+		}
+
 		private static function myTrace(log:String):void {
 			Trace.myTrace("BlueToothDevice.as", log);
 		}
+		
 	}
 }

@@ -20,6 +20,7 @@ package services
 	import Utilities.UniqueId;
 	
 	import databaseclasses.BgReading;
+	import databaseclasses.BlueToothDevice;
 	import databaseclasses.CommonSettings;
 	import databaseclasses.LocalSettings;
 	
@@ -129,19 +130,18 @@ package services
 		}
 		
 		private static function central_peripheralDiscoveredHandler(be:PeripheralEvent):void {
-			if (BluetoothService.isDexcomG5) {
+			if (BlueToothDevice.alwaysScan()) {
 				if ((new Date()).valueOf() - timeStampOfLastDeviceDiscovery < 60 * 1000) {
 					
 				} else {
 					timeStampOfLastDeviceDiscovery = (new Date()).valueOf();
 					BackgroundFetch.checkMuted();
 				}
-			}
-				
+			}				
 		}
 		
 		public static function callCompletionHandler(result:String):void {
-			myTrace("callCompletionhandler with result " + result);
+			myTrace("in callCompletionhandler , result = " + result);
 			BackgroundFetch.callCompletionHandler(result);
 		}
 		
@@ -196,6 +196,10 @@ package services
 		private static function loadRequestError(event:BackgroundFetchEvent):void {
 			myTrace("loadRequestError");
 			myTrace("error = " + (event.data.error as String));
+			if (event.data.text)
+				myTrace("text = " + (event.data.text as String));
+			if (event.data.type)
+				myTrace("type = " + (event.data.type as String));
 			
 			var backgroundFetchServiceResult:BackGroundFetchServiceEvent = new BackGroundFetchServiceEvent(BackGroundFetchServiceEvent.LOAD_REQUEST_ERROR);
 			backgroundFetchServiceResult.data = new Object();
@@ -236,6 +240,8 @@ package services
 		}
 		
 		public static function registerPushNotification(newTagList:String ):void {
+			myTrace("in registerPushNotification, but quickblox registration is disabled, returning");
+			return;//quick blox registration disabled
 			if (QBSessionBusy) {
 				myTrace("quickblox-trace : registerPushNotification not executed because QBSessionBusy, setting LOCAL_SETTING_SUBSCRIBED_TO_PUSH_NOTIFICATIONS to false");
 				LocalSettings.setLocalSetting(LocalSettings.LOCAL_SETTING_SUBSCRIBED_TO_PUSH_NOTIFICATIONS, "false");

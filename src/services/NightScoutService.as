@@ -1,12 +1,7 @@
 package services
 {
-	import com.distriqt.extension.dialog.Dialog;
-	import com.distriqt.extension.dialog.DialogView;
-	import com.distriqt.extension.dialog.builders.AlertBuilder;
-	import com.distriqt.extension.dialog.objects.DialogAction;
 	import com.distriqt.extension.networkinfo.NetworkInfo;
 	import com.distriqt.extension.networkinfo.events.NetworkInfoEvent;
-	import com.freshplanet.ane.AirBackgroundFetch.BackgroundFetch;
 	import com.hurlant.crypto.hash.SHA1;
 	import com.hurlant.util.Hex;
 	
@@ -32,7 +27,6 @@ package services
 	import events.BackGroundFetchServiceEvent;
 	import events.CalibrationServiceEvent;
 	import events.IosXdripReaderEvent;
-	import events.NightScoutServiceEvent;
 	import events.SettingsServiceEvent;
 	import events.TransmitterServiceEvent;
 	
@@ -60,6 +54,10 @@ package services
 		private static var lastSyncrunningChangeDate:Number = (new Date()).valueOf();
 		private static const maxMinutesToKeepSyncRunningTrue:int = 1;
 		
+		public static function NightScoutSyncRunning():Boolean {
+			return syncRunning;
+		}
+		
 		private static function get syncRunning():Boolean
 		{
 			if (!_syncRunning)
@@ -76,6 +74,7 @@ package services
 		private static function set syncRunning(value:Boolean):void
 		{
 			_syncRunning = value;
+			myTrace("setting syncRunning = " + value);
 			lastSyncrunningChangeDate = (new Date()).valueOf();
 		}
 		
@@ -133,6 +132,8 @@ package services
 				CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_URL_AND_API_SECRET_TESTED) == "true"
 			) {
 				sync();
+			} else {
+				syncFinished();
 			}
 			
 			function initialCalibrationReceived(event:CalibrationServiceEvent):void {
@@ -189,7 +190,9 @@ package services
 						&&
 						CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_API_SECRET) != CommonSettings.DEFAULT_API_SECRET
 						&& 
-						!syncRunning) {
+						!syncRunning
+						&& 
+						!DexcomShareService.DexcomShareSyncRunning()) {
 						testNightScoutUrlAndSecret();
 					}
 				}
@@ -268,14 +271,9 @@ package services
 			myTrace(ModelLocator.resourceManagerInstance.getString("nightscoutservice","nightscout_test_result_ok"));
 			
 			if (ModelLocator.isInForeground) {
-				var alert:DialogView = Dialog.service.create(
-					new AlertBuilder()
-					.setTitle(ModelLocator.resourceManagerInstance.getString("nightscoutservice","nightscout_title"))
-					.setMessage(ModelLocator.resourceManagerInstance.getString("nightscoutservice","nightscout_test_result_ok"))
-					.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-					.build()
-				);
-				DialogService.addDialog(alert, 60);
+				DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString("nightscoutservice","nightscout_title"),
+					ModelLocator.resourceManagerInstance.getString("nightscoutservice","nightscout_test_result_ok"),
+					60);
 			}
 		}
 		
@@ -294,27 +292,20 @@ package services
 				
 				myTrace(errorMessage);
 				
-				var alert:DialogView = Dialog.service.create(
-					new AlertBuilder()
-					.setTitle(ModelLocator.resourceManagerInstance.getString("nightscoutservice","nightscout_title"))
-					.setMessage(errorMessage)
-					.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-					.build()
-				);
-				DialogService.addDialog(alert, 60);
+				DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString("nightscoutservice","nightscout_title"),
+					errorMessage,
+					60);
 				myTrace("nightscout_test_result_nok");
 				LocalSettings.setLocalSetting(LocalSettings.LOCAL_SETTING_WARNING_THAT_NIGHTSCOUT_URL_AND_SECRET_IS_NOT_OK_ALREADY_GIVEN, "true");
 			}
 		}
 		
 		public static function sync(event:Event = null):void {
-			myTrace("calling NightScoutService.sync");
+			myTrace("in sync");
 			
 			if (!NetworkInfo.networkInfo.isReachable()) {
 				myTrace("network not reachable, calling BackGroundFetchService.callCompletionHandler although this wouldn't make any sense, no network, probably backgroundfetch is not waiting");
-				BackGroundFetchService.callCompletionHandler(BackGroundFetchService.NO_DATA);
-				return;
-				myTrace("and return");
+				syncFinished();
 			}
 
 			//myTrace("LOCAL_SETTING_DEVICE_TOKEN_ID = " + LocalSettings.getLocalSetting(LocalSettings.LOCAL_SETTING_DEVICE_TOKEN_ID));
@@ -331,7 +322,7 @@ package services
 					!=
 				LocalSettings.getLocalSetting(LocalSettings.LOCAL_SETTING_ACTUAL_QBLOX_SUBSCRIPTION_TAG)))
 			) {
-				myTrace("sync, url and secret tested, device token not empty and not subscribed, so registering now for push notifications");
+				myTrace("sync, url and secret tested, device token not empty and not subscribed, calling BackGroundFetchService.registerPushNotification");
 				BackGroundFetchService.registerPushNotification(LocalSettings.getLocalSetting(LocalSettings.LOCAL_SETTING_WISHED_QBLOX_SUBSCRIPTION_TAG));
 			}
 				
@@ -339,6 +330,11 @@ package services
 			if (syncRunning) {
 				myTrace("NightScoutService.as sync : sync running already, return");
 				return;
+			} else {
+				if (DexcomShareService.DexcomShareSyncRunning()) {
+					myTrace("NightScoutService.as sync : dexcom sync running already, return");
+					return;
+				}
 			}
 			
 			functionToCallAtUpOrDownloadSuccess = null;
@@ -350,16 +346,13 @@ package services
 				CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_API_SECRET) == CommonSettings.DEFAULT_API_SECRET
 				||
 				CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_URL_AND_API_SECRET_TESTED) ==  "false") {
-				BackGroundFetchService.callCompletionHandler(BackGroundFetchService.NO_DATA);
-				return;
+				syncFinished();
 			}
 			
 			if (Calibration.allForSensor().length < 2) {
-				BackGroundFetchService.callCompletionHandler(BackGroundFetchService.NO_DATA);
-				return;
+				syncFinished();
 			}
 			
-			myTrace("setting syncRunning = true");
 			syncRunning = true;
 			
 			var listOfReadingsAsArray:Array = [];
@@ -417,24 +410,20 @@ package services
 				myTrace("uploading_events_with_id" + logString);
 				createAndLoadURLRequest(_nightScoutEventsUrl, URLRequestMethod.POST, null, JSON.stringify(listOfReadingsAsArray), nightScoutUploadSuccess, nightScoutUploadFailed);
 			} else {
-				myTrace("setting syncRunning = false");
-				BackGroundFetchService.callCompletionHandler(BackGroundFetchService.NO_DATA);
-				syncRunning = false;
+				syncFinished();
 			}
 		}
 		
 		private static function nightScoutUploadSuccess(event:Event):void {
 			myTrace("in nightScoutUploadSuccess");
-			BackGroundFetchService.callCompletionHandler(BackGroundFetchService.NEW_DATA);
 			
 			myTrace("upload_to_nightscout_successfull");
 			CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_NIGHTSCOUT_SYNC_TIMESTAMP, (new Date()).valueOf().toString());
-			syncFinished(true);
+			syncFinished();
 		}
 		
 		private static function nightScoutUploadFailed(event:BackGroundFetchServiceEvent):void {
 			myTrace("in nightScoutUploadFailed");
-			BackGroundFetchService.callCompletionHandler(BackGroundFetchService.FETCH_FAILED);
 			
 			var errorMessage:String;
 			if (event.data) {
@@ -445,32 +434,20 @@ package services
 			}
 			
 			myTrace("upload_to_nightscout_unsuccessfull" + errorMessage);
-			syncFinished(false);
+			syncFinished();
 		}
 		
 		private static function defaultErrorFunction(event:BackGroundFetchServiceEvent):void {
-			myTrace("in defaultErrorFunction");
 			if(functionToCallAtUpOrDownloadFailure != null) {
-				myTrace("in defaultErrorFunction functionToCallAtUpOrDownloadFailure != null");
 				functionToCallAtUpOrDownloadFailure(event);
-			}
-			else {
-				myTrace("in defaultErrorFunction functionToCallAtUpOrDownloadFailure = null");
-				BackGroundFetchService.callCompletionHandler(BackGroundFetchService.FETCH_FAILED);
 			}
 			
 			functionToCallAtUpOrDownloadSuccess = null;
 			functionToCallAtUpOrDownloadFailure = null;
 		}
 		private static function defaultSuccessFunction(event:BackGroundFetchServiceEvent):void {
-			myTrace("in defaultSuccessFunction");
 			if(functionToCallAtUpOrDownloadSuccess != null) {
-				myTrace("in defaultSuccessFunction functionToCallAtUpOrDownloadSuccess != null");
 				functionToCallAtUpOrDownloadSuccess(event);
-			}
-			else {
-				myTrace("in defaultSuccessFunction functionToCallAtUpOrDownloadSuccess = null");
-				BackGroundFetchService.callCompletionHandler(BackGroundFetchService.NEW_DATA);
 			}
 			
 			functionToCallAtUpOrDownloadSuccess = null;
@@ -497,10 +474,10 @@ package services
 			Trace.myTrace("NightScoutService.as", log);
 		}
 		
-		private static function syncFinished(result:Boolean):void {
+		private static function syncFinished():void {
 			myTrace("syncfinished");
-			myTrace("setting syncRunning = false");
 			syncRunning = false;
+			DexcomShareService.sync();
 		}
 		
 	}

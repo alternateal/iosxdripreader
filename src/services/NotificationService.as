@@ -283,8 +283,8 @@ package services
 				Notifications.service.addEventListener(NotificationEvent.NOTIFICATION_SELECTED, notificationHandler);
 				Notifications.service.addEventListener(NotificationEvent.NOTIFICATION, notificationHandler);
 				Notifications.service.addEventListener(NotificationEvent.ACTION, notificationHandler);
-				CalibrationService.instance.addEventListener(CalibrationServiceEvent.INITIAL_CALIBRATION_EVENT, updateAllNotifications);
-				TransmitterService.instance.addEventListener(TransmitterServiceEvent.BGREADING_EVENT, bgReadingEventReceived);
+				CalibrationService.instance.addEventListener(CalibrationServiceEvent.INITIAL_CALIBRATION_EVENT, updateBgNotification);
+				TransmitterService.instance.addEventListener(TransmitterServiceEvent.BGREADING_EVENT, updateBgNotification);
 				if (Application.isSupported) {
 					Application.service.addEventListener(ApplicationStateEvent.DEACTIVATE, application_deactivateHandler);
 				}
@@ -299,23 +299,13 @@ package services
 				{
 					case ApplicationStateEvent.CODE_LOCK:
 					case ApplicationStateEvent.CODE_HOME:
-						myTrace("NotificationService.as, setting ModelLocator.isInForeground = false");
+						myTrace("in application_deactivateHandler setting ModelLocator.isInForeground = false");
 						ModelLocator.isInForeground = false;
-						myTrace("NotificationService.as, setting active window to Home screen");
+						myTrace("in application_deactivateHandler setting active window to Home screen");
 						(ModelLocator.navigator.parentNavigator as TabbedViewNavigator).selectedIndex = 0;
 						myTrace("in application_deactivateHandler, setting systemIdleMode = SystemIdleMode.NORMAL");
 						NativeApplication.nativeApplication.systemIdleMode = SystemIdleMode.NORMAL;
 					break;
-				}
-			}
-			
-			function initialCalibrationEventReceived(event:CalibrationServiceEvent):void {
-				updateAllNotifications(null);
-			}
-			
-			function bgReadingEventReceived(event:TransmitterServiceEvent):void {
-				if (Calibration.allForSensor().length >= 2) {
-					updateAllNotifications(null);
 				}
 			}
 			
@@ -334,29 +324,25 @@ package services
 			_instance.dispatchEvent(notificationserviceEvent);
 		}
 		
-		/**
-		 * simply clears all notifications 
-		 */
-		public static function clearAllNotifications():void {
+		public static function updateBgNotification(be:Event = null):void {
+			myTrace("in updateBgNotification");
 			Notifications.service.cancel(ID_FOR_BG_VALUE);
-			Notifications.service.cancel(ID_FOR_REQUEST_CALIBRATION);
-		}
-		
-		public static function updateAllNotifications(be:Event):void {
-			myTrace("NotificationService.as in updateAllNotifications");
-			clearAllNotifications();
 			
 			//start with bgreading notification
 			if (LocalSettings.getLocalSetting(LocalSettings.LOCAL_SETTING_ALWAYS_ON_NOTIFICATION) == "true" && !ModelLocator.isInForeground) {
+				myTrace("in updateBgNotification notificatoin always on and not in foreground");
 				if (Calibration.allForSensor().length >= 2) {
 					var lastBgReading:BgReading = BgReading.lastNoSensor(); 
 					var valueToShow:String = "";
+					myTrace("in updateBgNotification Calibration.allForSensor().length >= 2");
 					if (lastBgReading != null) {
+						myTrace("in updateBgNotification lastbgreading != null");
 						if (lastBgReading.calculatedValue != 0) {
 							if ((new Date().getTime()) - (60000 * 11) - lastBgReading.timestamp > 0) {
 								valueToShow = "---"
 							} else {
 								valueToShow = BgGraphBuilder.unitizedString(lastBgReading.calculatedValue, CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_DO_MGDL) == "true");
+								myTrace("in updateBgNotification value to show calculated");
 								if (!lastBgReading.hideSlope) {
 									valueToShow += " " + lastBgReading.slopeArrow();
 								}
@@ -378,7 +364,6 @@ package services
 						.build());
 				}
 			}
-			
 		}
 		
 		public static function notificationIdToText(id:int):String {

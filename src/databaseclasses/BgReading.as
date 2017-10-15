@@ -308,19 +308,6 @@ package databaseclasses
 			return 0;
 		}
 		
-		public static function activePrediction():Number {
-			var bgReading:BgReading = lastNoSensor();
-			if (bgReading != null) {
-				var currentTime:Number = (new Date()).valueOf();
-				if (currentTime >=  bgReading.timestamp + (60000 * 7))  { 
-					currentTime = bgReading.timestamp + (60000 * 7); 
-				}
-				var time:Number = currentTime + BESTOFFSET;
-				return ((bgReading.a * time * time) + (bgReading.b * time) + bgReading.c);
-			}
-			return 0;
-		}
-		
 		/**
 		 * returnvalue is an array of two objects, the first beging a Number, the second a Boolean 
 		 */
@@ -602,8 +589,7 @@ package databaseclasses
 			myTrace("start of create bgreading with rawdata = " + rawData + ", and filtereddata = " + filteredData);
 			var sensor:Sensor = Sensor.getActiveSensor();
 			var calibration:Calibration = Calibration.last();
-			if (calibration != null) {
-			}
+
 			var timestamp:Number = (new Date()).valueOf();
 			
 			var bgReading:BgReading = (new BgReading(
@@ -726,7 +712,8 @@ package databaseclasses
 				return this;
 			}
 			var adjust_for:Number = AGE_ADJUSTMENT_TIME - (timestamp - sensor.startedAt);
-			if (adjust_for <= 0 || BlueToothDevice.isLimitter()) {
+			if (adjust_for <= 0 || BlueToothDevice.isTypeLimitter()) {
+				myTrace("in calculateAgeAdjustedRawValue, istypelimitter, not applying age adjustment");
 				_ageAdjustedRawValue = rawData;
 			} else {
 				_ageAdjustedRawValue = ((AGE_ADJUSTMENT_FACTOR * (adjust_for / AGE_ADJUSTMENT_TIME)) * rawData) + rawData;
@@ -814,6 +801,29 @@ package databaseclasses
 			} else {
 				return "\u21c8";
 			}
+		}
+		
+		public function getSlopeOrdinal():int {
+			var slope_by_minute:Number = calculatedValueSlope * 60000;
+			var ordinal:int = 0;
+			if(!hideSlope) {
+				if (slope_by_minute <= (-3.5)) {
+					ordinal = 7;
+				} else if (slope_by_minute <= (-2)) {
+					ordinal = 6;
+				} else if (slope_by_minute <= (-1)) {
+					ordinal = 5;
+				} else if (slope_by_minute <= (1)) {
+					ordinal = 4;
+				} else if (slope_by_minute <= (2)) {
+					ordinal = 3;
+				} else if (slope_by_minute <= (3.5)) {
+					ordinal = 2;
+				} else {
+					ordinal = 1;
+				}
+			}
+			return ordinal;
 		}
 		
 		public function slopeName():String {

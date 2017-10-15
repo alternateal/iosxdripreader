@@ -100,11 +100,18 @@
 		 public static const COMMON_SETTING_G5_BATTERY_MARKER:int = 14;
 		 public static const COMMON_SETTING_G5_BATTERY_FROM_MARKER:int = 15;
 		 /**
-		 * G4 or G5, also for limitter G4 is used
+		 * Possible values :<br>
+		 * G4 : any xdrip or xbridge that receives G4 transmitter signal<br> 
+		 * G5<br>
+		 * Limitter<br>
+		 * Bluereader<br>
+		 * BluKon<br>
+		 * <br>
+		 * Default value is an empty string, peripheral type unknown
 		  */
 		 public static const COMMON_SETTING_PERIPHERAL_TYPE:int = 16;
 		 public static const COMMON_SETTING_G5_INFO_SCREEN_SHOWN:int = 17;
-		 public static const COMMON_SETTING_INITIAL_SELECTION_G4_OR_G5_DONE:int = 18;
+		 public static const COMMON_SETTING_INITIAL_SELECTION_PERIPHERAL_TYPE_DONE:int = 18;
 		 public static const COMMON_SETTING_LICENSE_INFO_CONFIRMED:int = 19;
 		 /**
 		 * only related to quickblox subscription in iosxdripreader.mxml activateHandler 
@@ -158,6 +165,43 @@
 		 public static const COMMON_SETTING_CALIBRATION_REQUEST_ALERT:int = 32;
 		 public static const COMMON_SETTING_VERY_LOW_ALERT:int = 33;
 		 public static const COMMON_SETTING_VERY_HIGH_ALERT:int = 34;
+		 /**
+		  * 0 = never synced 
+		  */
+		 public static const COMMON_SETTING_DEXCOMSHARE_SYNC_TIMESTAMP:int = 35;
+		 
+		 /**
+		 * For limitter and/or bluereaderw<br>
+		 * value 0 means level not known
+		  */
+		 public static const COMMON_SETTING_FSL_SENSOR_BATTERY_LEVEL:int = 36;
+		 /**
+		  * For limitter and/or bluereaderw<br>
+		  * value 0 means level not known
+		  */
+		 public static const COMMON_SETTING_BLUEREADER_BATTERY_LEVEL:int = 37;
+		 /**
+		  * For limitter and/or bluereaderw<br>
+		  * value 0 means level not known<br>
+		  * time in minutes
+		  */
+		 public static const COMMON_SETTING_FSL_SENSOR_AGE:int = 38;
+		 /**
+		  * For blukon<br>
+		  * value 0 means level not known
+		  */
+		 public static const COMMON_SETTING_BLUKON_BATTERY_LEVEL:int = 39;
+		 
+		 public static const COMMON_SETTING_TIME_STAMP_LAST_SENSOR_AGE_CHECK_IN_MS:int = 40;
+		 
+		 /**
+		 * dexcom receiver serial number
+		  */
+		 public static const COMMON_SETTING_DEXCOM_SHARE_SERIALNUMBER:int = 41;
+		 public static const COMMON_SETTING_DEXCOM_SHARE_ACCOUNTNAME:int = 42;
+		 public static const COMMON_SETTING_DEXCOM_SHARE_PASSWORD:int = 43;
+		 public static const COMMON_SETTING_DEXCOM_SHARE_ON:int = 44;
+		 public static const COMMON_SETTING_DEXCOM_SHARE_US_URL:int = 45;
 
 		 private static var commonSettings:Array = [
 			 "0",//COMMON_SETTING_CURRENT_SENSOR
@@ -178,7 +222,7 @@
 			 "0",//COMMON_SETTING_G5_BATTERY_FROM_MARKER
 			 "",//COMMON_SETTING_PERIPHERAL_TYPE
 			 "false",//COMMON_SETTING_G5_INFO_SCREEN_SHOWN
-			 "false",//COMMON_SETTING_INITIAL_SELECTION_G4_OR_G5_DONE
+			 "false",//COMMON_SETTING_INITIAL_SELECTION_PERIPHERAL_TYPE_DONE
 			 "false",//COMMON_SETTING_LICENSE_INFO_CONFIRMED
 			 "0",//COMMON_SETTING_TIME_SINCE_LAST_QUICK_BLOX_SUBSCRIPTION
 			 "00:00>70>DefaultNoAlertToBeReplaced",//COMMON_SETTING_LOW_ALERT
@@ -194,7 +238,18 @@
 			 "00:00>DefaultValue>DefaultNoAlertToBeReplaced-08:00>DefaultValue>SilentToBeReplaced",//COMMON_SETTING_BATTERY_ALERT
 			 "00:00>12>DefaultNoAlertToBeReplaced-08:00>12>SilentToBeReplaced-23:00>12>DefaultNoAlertToBeReplaced",//COMMON_SETTING_CALIBRATION_REQUEST_ALERT
 			 "00:00>50>DefaultNoAlertToBeReplaced",//COMMON_SETTING_VERY_LOW_ALERT
-			 "00:00>300>DefaultNoAlertToBeReplaced"//COMMON_SETTING_VERY_HIGH_ALERT
+			 "00:00>300>DefaultNoAlertToBeReplaced",//COMMON_SETTING_VERY_HIGH_ALERT
+			 "0",//COMMON_SETTING_FSL_SENSOR_BATTERY_LEVEL
+			 "0",//COMMON_SETTING_BLUEREADER_BATTERY_LEVEL
+			 "0",//COMMON_SETTING_FSL_SENSOR_AGE
+			 "0",//COMMON_SETTING_BLUKON_BATTERY_LEVEL
+			 "0",//COMMON_SETTING_TIME_STAMP_LAST_SENSOR_AGE_CHECK_IN_MS
+			 "0",//COMMON_SETTING_DEXCOMSHARE_SYNC_TIMESTAMP
+			 "SM00000000",//COMMON_SETTING_DEXCOM_SHARE_SERIALNUMBER
+			 "account name",//COMMON_SETTING_DEXCOM_SHARE_ACCOUNTNAME
+			 "password",//COMMON_SETTING_DEXCOM_SHARE_PASSWORD
+			 "false",//COMMON_SETTING_DEXCOM_SHARE_ON
+			 "false"//COMMON_SETTING_DEXCOM_SHARE_US_URL
 		 ];
 		 
 		 public function CommonSettings()

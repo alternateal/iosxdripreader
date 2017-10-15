@@ -34,6 +34,8 @@ package services
 	
 	import spark.formatters.DateTimeFormatter;
 	
+	import databaseclasses.BlueToothDevice;
+	
 	import distriqtkey.DistriqtKey;
 	
 	import events.BlueToothServiceEvent;
@@ -104,8 +106,12 @@ package services
 			if (ModelLocator.isInForeground)
 				return;
 			
+			if (BlueToothDevice.isBluKon())
+				return;//blukon keeps on trying to connect, there's always a request to pair, no need to give additional comments
+			
 			var titleText:String = ModelLocator.resourceManagerInstance.getString("dialogservice","device_not_paired_dialog_title");
 			var bodyText:String = ModelLocator.resourceManagerInstance.getString("dialogservice","device_not_paired_dialog_body");
+			
 			var dateFormatter:DateTimeFormatter = new DateTimeFormatter();
 			dateFormatter.dateTimePattern = "HH:mm:ss";
 			dateFormatter.useUTC = false;
@@ -187,6 +193,20 @@ package services
 				maxDurationTimer.stop();
 				maxDurationTimer = null;
 			}
+		}
+		
+		/**
+		 * if maxDurationInSeconds specified then the dialog will be closed after the specified time
+		 */
+		public static function openSimpleDialog(title:String, message:String, maxDurationInSeconds:Number = Number.NaN):void {
+			var alert:DialogView = Dialog.service.create(
+				new AlertBuilder()
+				.setTitle(title)
+				.setMessage(message)
+				.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
+				.build()
+			);
+			DialogService.addDialog(alert, maxDurationInSeconds);
 		}
 	}
 }

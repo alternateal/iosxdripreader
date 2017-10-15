@@ -9,7 +9,9 @@
 		<![CDATA[
 			import com.distriqt.extension.dialog.Dialog;
 			import com.distriqt.extension.dialog.DialogView;
+			import com.distriqt.extension.dialog.PickerDialogView;
 			import com.distriqt.extension.dialog.builders.AlertBuilder;
+			import com.distriqt.extension.dialog.builders.PickerDialogBuilder;
 			import com.distriqt.extension.dialog.events.DialogViewEvent;
 			import com.distriqt.extension.dialog.objects.DialogAction;
 			import com.hurlant.crypto.hash.SHA1;
@@ -19,14 +21,10 @@
 			
 			import spark.primitives.Rect;
 			
-			import G4Model.TransmitterStatus;
-			
-			import G5Model.TransmitterStatus;
-			
-			import Utilities.FromtimeAndValueArrayCollection;
 			import Utilities.Trace;
 			
 			import databaseclasses.BgReading;
+			import databaseclasses.BlueToothDevice;
 			import databaseclasses.CommonSettings;
 			import databaseclasses.LocalSettings;
 			
@@ -62,7 +60,19 @@
 			[Bindable]
 			private static var transmitterTypeText:String="";
 			[Bindable]
+			private static var dexcomShareAccountName:String="";
+			[Bindable]
+			private static var dexcomSharePassword:String="";
+			[Bindable]
+			private static var dexcomSharePasswordShownOnScreen:String="";
+			[Bindable]
+			private static var dexcomShareSerialNumber:String="";
+			[Bindable]
+			private static var dexcomShareOnOffText:String="";
+			[Bindable]
 			private static var versionText:String="";
+			[Bindable]
+			private static var dexcomShareURL:String="";
 			
 			private static var resetColorTimer:Timer;
 			
@@ -115,17 +125,56 @@
 				
 				transmitterIdText = CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_TRANSMITTER_ID);
 				transmitterTypeText = CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_PERIPHERAL_TYPE);
+				if (BlueToothDevice.needsTransmitterId()) {
+					groupTransmitterId.alpha = 1;
+				} else {
+					groupTransmitterId.alpha = 0.25;
+				}
+				
+				dexcomShareAccountName = CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_DEXCOM_SHARE_ACCOUNTNAME);
+				dexcomSharePassword = CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_DEXCOM_SHARE_PASSWORD);
+				dexcomSharePasswordShownOnScreen = replaceByStars(dexcomSharePassword);
+				dexcomShareSerialNumber = CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_DEXCOM_SHARE_SERIALNUMBER);
+				if (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_DEXCOM_SHARE_ON) == "true") {
+					dexcomShareOnOffText = ModelLocator.resourceManagerInstance.getString('settingsview','on');
+					changeDexcomShareStatus();
+				} else {
+					dexcomShareOnOffText = ModelLocator.resourceManagerInstance.getString('settingsview','off');
+					changeDexcomShareStatus();
+				}
+				dexcomShareURL = CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_DEXCOM_SHARE_US_URL) == "true" ?
+					ModelLocator.resourceManagerInstance.getString("settingsview","dexcom_us_url")
+					:
+					ModelLocator.resourceManagerInstance.getString('settingsview','dexcom_non_us_url');
+				changeDexcomShareStatus();
 				
 				LocalSettings.instance.addEventListener(SettingsServiceEvent.SETTING_CHANGED, settingChanged);
+				CommonSettings.instance.addEventListener(SettingsServiceEvent.SETTING_CHANGED, settingChanged);
 				
 				versionText = ModelLocator.resourceManagerInstance.getString('general','version');
 			}
 			
-			private static function settingChanged(event:SettingsServiceEvent):void {
+			private static function replaceByStars(input:String):String {
+				if (input == null)
+					return "****";
+				var returnValue:String = "";
+				for (var i:int =  0; i < input.length;i++) {
+					returnValue += "*";
+				}
+				return returnValue;
+			}
+			
+			private function settingChanged(event:SettingsServiceEvent):void {
 				if (event.data == CommonSettings.COMMON_SETTING_TRANSMITTER_ID) {
 					transmitterIdText = CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_TRANSMITTER_ID);
 				} else if (event.data == CommonSettings.COMMON_SETTING_PERIPHERAL_TYPE) {
 					transmitterTypeText = CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_PERIPHERAL_TYPE);
+					if (BlueToothDevice.needsTransmitterId()) {
+						groupTransmitterId.alpha = 1;
+					} else {
+						groupTransmitterId.alpha = 0.25;
+					}
+					changeDexcomShareStatus();
 				}
 			}
 			
@@ -254,31 +303,22 @@
 				}
 				
 				var asNumber:Number = new Number((event.values[0] as String).replace(",","."));
+				
 				if (isNaN(asNumber)) {
-					//add the warning message
-					var alert:DialogView = Dialog.service.create(
-						new AlertBuilder()
-						.setTitle(ModelLocator.resourceManagerInstance.getString("settingsview","low_value"))
-						.setMessage(ModelLocator.resourceManagerInstance.getString("calibrationservice","value_should_be_numeric"))
-						.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-						.build()
-					);
-					DialogService.addDialog(alert);
-				} else if (asNumber > new Number(CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_HIGH_MARK))) {
-					var alert:DialogView = Dialog.service.create(
-						new AlertBuilder()
-						.setTitle(ModelLocator.resourceManagerInstance.getString("settingsview","high_value"))
-						.setMessage(ModelLocator.resourceManagerInstance.getString("settingsview","low_value_should_be_lower_than_high_value"))
-						.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-						.build()
-					);
-					DialogService.addDialog(alert);
+					DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString("settingsview","low_value"),
+						ModelLocator.resourceManagerInstance.getString("calibrationservice","value_should_be_numeric"));
 				} else {
-					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_LOW_MARK,
-						CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_DO_MGDL) == "true" ?
-						asNumber.toString() 
-						: ((Math.round(BgReading.mmolToMgdl(asNumber)) * 10) / 10).toString());
-					lowValueText = asNumber.toString();
+					var asNumberInMGDL:Number = asNumber;
+					if (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_DO_MGDL) != "true") {
+						asNumberInMGDL = (Math.round(BgReading.mmolToMgdl(asNumber)) * 10) / 10;
+					}
+					if (asNumberInMGDL > new Number(CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_HIGH_MARK))) {
+						DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString("settingsview","low_value"),
+							ModelLocator.resourceManagerInstance.getString("settingsview","low_value_should_be_lower_than_high_value"));
+					} else {
+						CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_LOW_MARK, asNumberInMGDL.toString());
+						lowValueText = asNumber.toString();
+					}
 				}
 			}
 			
@@ -305,31 +345,22 @@
 				}
 				
 				var asNumber:Number = new Number((event.values[0] as String).replace(",","."));
+				
 				if (isNaN(asNumber)) {
-					//add the warning message
-					var alert:DialogView = Dialog.service.create(
-						new AlertBuilder()
-						.setTitle(ModelLocator.resourceManagerInstance.getString("settingsview","high_value"))
-						.setMessage(ModelLocator.resourceManagerInstance.getString("calibrationservice","value_should_be_numeric"))
-						.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-						.build()
-					);
-					DialogService.addDialog(alert);
-				} else if (asNumber < new Number(CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_LOW_MARK))) {
-					var alert:DialogView = Dialog.service.create(
-						new AlertBuilder()
-						.setTitle(ModelLocator.resourceManagerInstance.getString("settingsview","high_value"))
-						.setMessage(ModelLocator.resourceManagerInstance.getString("settingsview","high_value_should_be_higher_than_low_value"))
-						.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-						.build()
-					);
-					DialogService.addDialog(alert);
+					DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString("settingsview","high_value"),
+						ModelLocator.resourceManagerInstance.getString("calibrationservice","value_should_be_numeric"));
 				} else {
-					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_HIGH_MARK,
-						CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_DO_MGDL) == "true" ?
-						asNumber.toString() 
-						: ((Math.round(BgReading.mmolToMgdl(asNumber)) * 10) / 10).toString());
-					highValueText = asNumber.toString();
+					var asNumberInMGDL:Number = asNumber;
+					if (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_DO_MGDL) != "true") {
+						asNumberInMGDL = (Math.round(BgReading.mmolToMgdl(asNumber)) * 10) / 10;
+					}
+					if (asNumberInMGDL < new Number(CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_LOW_MARK))) {
+						DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString("settingsview","high_value"),
+							ModelLocator.resourceManagerInstance.getString("settingsview","high_value_should_be_higher_than_low_value"));
+					} else {
+						CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_HIGH_MARK, asNumberInMGDL.toString());
+						highValueText = asNumber.toString();
+					}
 				}
 			}
 			
@@ -471,14 +502,8 @@
 				
 				navigator.pushView(FromtimeAndValueListView,dataToSend);
 				if (LocalSettings.getLocalSetting(LocalSettings.LOCAL_SETTING_MISSED_READING_WARNING_GIVEN) == "false") {
-					var alert:DialogView = Dialog.service.create(
-						new AlertBuilder()
-						.setTitle(ModelLocator.resourceManagerInstance.getString('settingsview',"warning"))
-						.setMessage(ModelLocator.resourceManagerInstance.getString('settingsview',"warn_missed_reading_needs_internet"))
-						.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-						.build()
-					);
-					DialogService.addDialog(alert);
+					DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString('settingsview',"warning"),
+						ModelLocator.resourceManagerInstance.getString('settingsview',"warn_missed_reading_needs_internet"));
 					LocalSettings.setLocalSetting(LocalSettings.LOCAL_SETTING_MISSED_READING_WARNING_GIVEN,"true");
 				}
 			}
@@ -502,14 +527,8 @@
 				navigator.pushView(FromtimeAndValueListView,dataToSend);
 				
 				if (LocalSettings.getLocalSetting(LocalSettings.LOCAL_SETTING_LOW_BATTERY_WARNING_GIVEN) == "false") {
-					var alert:DialogView = Dialog.service.create(
-						new AlertBuilder()
-						.setTitle(ModelLocator.resourceManagerInstance.getString('settingsview',"warning"))
-						.setMessage(ModelLocator.resourceManagerInstance.getString('settingsview',"warn_and_info_low_battery"))
-						.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-						.build()
-					);
-					DialogService.addDialog(alert);
+					DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString('settingsview',"warning"),
+						ModelLocator.resourceManagerInstance.getString('settingsview',"warn_and_info_low_battery"));
 					LocalSettings.setLocalSetting(LocalSettings.LOCAL_SETTING_LOW_BATTERY_WARNING_GIVEN,"true");
 				}
 			}
@@ -532,14 +551,8 @@
 				
 				navigator.pushView(FromtimeAndValueListView,dataToSend);
 				if (LocalSettings.getLocalSetting(LocalSettings.LOCAL_SETTING_PHONE_MUTED_WARNING_GIVEN) == "false") {
-					var alert:DialogView = Dialog.service.create(
-						new AlertBuilder()
-						.setTitle(ModelLocator.resourceManagerInstance.getString('settingsview',"warning"))
-						.setMessage(ModelLocator.resourceManagerInstance.getString('settingsview',"warn_and_info_phone_muted"))
-						.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-						.build()
-					);
-					DialogService.addDialog(alert);
+					DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString('settingsview',"warning"),
+						ModelLocator.resourceManagerInstance.getString('settingsview',"warn_and_info_phone_muted"));
 					LocalSettings.setLocalSetting(LocalSettings.LOCAL_SETTING_PHONE_MUTED_WARNING_GIVEN,"true");
 				}
 			}
@@ -555,10 +568,18 @@
 			public static function requestNewTransmitterId(calledFromHomeView:Boolean = false):void {
 				var title:String = CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_PERIPHERAL_TYPE) + " " +
 					ModelLocator.resourceManagerInstance.getString("transmitterservice","transmitter_id_settings_title");
+				var message:String = ModelLocator.resourceManagerInstance.getString("transmitterservice","enter_transmitter_id");
+				if (BlueToothDevice.isDexcomG4()) {
+					message += " (5 characters)";
+				} else if (BlueToothDevice.isDexcomG5()) {
+					message += " (6 characters)";
+				} else if (BlueToothDevice.isBluKon()) {
+					message += " (BLUxxxxx)";
+				} 
 				var alert:DialogView = Dialog.service.create(
 					new AlertBuilder()
 					.setTitle(title)
-					.setMessage(ModelLocator.resourceManagerInstance.getString("transmitterservice","enter_transmitter_id"))
+					.setMessage(message)
 					.addTextField("",CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_TRANSMITTER_ID))
 					.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
 					.addOption(ModelLocator.resourceManagerInstance.getString("general","cancel"), DialogAction.STYLE_CANCEL, 1)
@@ -571,59 +592,109 @@
 					if (event.index == 1) {
 						return;
 					}
-					var idLength:Number = (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_PERIPHERAL_TYPE)) == "G5" ? 6:5
-					if ((event.values[0] as String).length != idLength) {
-						var alertMessage:String =
-							(ModelLocator.resourceManagerInstance.getString("transmitterservice","transmitter_id_should_be_five_chars")).replace("{max}", idLength.toString());
-						if (calledFromHomeView) {
-							alertMessage += " " + (ModelLocator.resourceManagerInstance.getString("transmitterservice","set_transmitter_id_in_settings"));
-						}
-						var alert:DialogView = Dialog.service.create(
-							new AlertBuilder()
-							.setTitle(ModelLocator.resourceManagerInstance.getString("transmitterservice","enter_transmitter_id_dialog_title"))
-							.setMessage(alertMessage)
-							.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-							.build()
-						);
-						DialogService.addDialog(alert);
-					} else {
-						CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_TRANSMITTER_ID, (event.values[0] as String).toUpperCase());
-						transmitterIdText = CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_TRANSMITTER_ID);
-						
-						//reset all battery levels
-						resetAllTransmitterBatteryLevels();
+					var idLength:Number = BlueToothDevice.isDexcomG5() ? 6:
+						(BlueToothDevice.isDexcomG4() ? 5: Number.NaN);
+					
+					if (!isNaN(idLength)) {
+						if ((event.values[0] as String).length != idLength) {
+							var alertMessage:String =
+								(ModelLocator.resourceManagerInstance.getString("transmitterservice","transmitter_id_should_be_five_chars")).replace("{max}", idLength.toString());
+							if (calledFromHomeView) {
+								alertMessage += " " + (ModelLocator.resourceManagerInstance.getString("transmitterservice","set_transmitter_id_in_settings"));
+							}
+							DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString("transmitterservice","enter_transmitter_id_dialog_title"),
+								alertMessage);
+							return;
+						}					
 					}
+					
+					if (BlueToothDevice.isBluKon()) {
+						if (((event.values[0] as String).length != 8) || ((event.values[0] as String).toUpperCase().indexOf("BLU") < 0)) {
+							var alertMessage:String =
+								(ModelLocator.resourceManagerInstance.getString("transmitterservice","blukon_transmitter_id_should_be_five_chars"));
+							if (calledFromHomeView) {
+								alertMessage += " " + (ModelLocator.resourceManagerInstance.getString("transmitterservice","set_transmitter_id_in_settings"));
+							}
+							DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString("transmitterservice","enter_transmitter_id_dialog_title"),
+								alertMessage);
+							return;
+						}
+					}
+					
+					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_TRANSMITTER_ID, (event.values[0] as String).toUpperCase());
+					transmitterIdText = CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_TRANSMITTER_ID);
+						
+					//reset all battery levels
+					resetAllTransmitterBatteryLevels();
 				}
 			}
 			
 			private function changeTransmitterId_clickHandler(event:MouseEvent):void {
+				if (!BlueToothDevice.needsTransmitterId())
+					return;
 				rect21.color = uint("0xD3D3D3");
 				rect22.color = uint("0xD3D3D3");
 				setResetColorTimer();
 				requestNewTransmitterId();
 			}
 			
-			private function changeTransmitterType_clickHandler(event:MouseEvent):void {
+			public function changeTransmitterType_clickHandler(event:MouseEvent = null):void {
 				rect27.color = uint("0xD3D3D3");
 				rect28.color = uint("0xD3D3D3");
 				setResetColorTimer();
-				var newSetting:String
-				if (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_PERIPHERAL_TYPE) == "G4") {
-					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_PERIPHERAL_TYPE, "G5");
-					transmitterTypeText = "G5";
-					newSetting = FromtimeAndValueArrayCollection.replaceAllValues(CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_BATTERY_ALERT), new Number(G5Model.TransmitterStatus.LOW_BATTERY_WARNING_LEVEL_VOLTAGEA), false)
-					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_BATTERY_ALERT, newSetting);
-				} else {
-					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_PERIPHERAL_TYPE, "G4");
-					transmitterTypeText = "G4";
-					newSetting = FromtimeAndValueArrayCollection.replaceAllValues(CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_BATTERY_ALERT), new Number(G4Model.TransmitterStatus.TRANSMITTER_BATTERY_LOW), false)
-					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_BATTERY_ALERT, newSetting);
+				changeTransmitterType();
+			}
+			
+			public static function changeTransmitterType():void {
+				if (LocalSettings.getLocalSetting(LocalSettings.LOCAL_SETTING_LICENSE_INFO_ACCEPTED) == "false") {
+					HomeView.dialogServiceInitiated(null);
+					return;
 				}
-				//no need to request new transmitter id here, this will be initiated from homeview which is listening
-				//changes in setting COMMON_SETTING_PERIPHERAL_TYPE
 				
-				//reset battery levels to unknown
-				resetAllTransmitterBatteryLevels();
+				var selectedTransmitterType:int = 0;
+				var currentType:String = CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_PERIPHERAL_TYPE);
+				if (currentType.toUpperCase() == "G5") {
+					selectedTransmitterType = 1;
+				} else if (currentType.toUpperCase() == "LIMITTER") {
+					selectedTransmitterType = 2;
+				} else if (currentType.toUpperCase() == "BLUEREADER") {
+					selectedTransmitterType = 3;
+				}  else if (currentType.toUpperCase() == "BLUKON") {
+					selectedTransmitterType = 4;
+				}
+				var transmitterTypeNames:Array = new Array();
+				transmitterTypeNames.push("G4", "G5", "Limitter", "Bluereader", "BluKon");
+				
+				var picker:PickerDialogView = Dialog.service.create(
+					new PickerDialogBuilder()
+					.setTitle(ModelLocator.resourceManagerInstance.getString('settingsview', 'transmittertype_picker_title'))
+					.setCancelLabel(ModelLocator.resourceManagerInstance.getString("general","cancel"))
+					.setAcceptLabel("Ok")
+					.addColumn(transmitterTypeNames, selectedTransmitterType)
+					.build()
+				);
+				
+				picker.addEventListener( DialogViewEvent.CLOSED, picker_closedHandler );
+				picker.show();
+				
+				function picker_closedHandler(event:DialogViewEvent): void {
+					var newTransmitterType:String = event.values[0];
+					if (newTransmitterType.toUpperCase() == currentType.toUpperCase())
+						return;
+					
+					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_PERIPHERAL_TYPE, newTransmitterType);
+					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_TRANSMITTER_ID, "00000");
+					transmitterIdText = "00000";
+					//transmitterTypeText = newTransmitterType;	
+					resetAllTransmitterBatteryLevels();
+					if (BlueToothDevice.isBluKon()) {
+						DialogService.openSimpleDialog("Warning",
+							"Blukon is still under development, please change to another transmittertype");
+					} else if (BlueToothDevice.isLimitter()) {
+						DialogService.openSimpleDialog("Warning",
+							"Limitter is not yet tested, if you want to support testing, please send me an e-mail");
+					} 
+				}
 			}
 			
 			private static function resetAllTransmitterBatteryLevels():void {
@@ -635,6 +706,9 @@
 				CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_G5_STATUS, "unknown");
 				CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_G5_BATTERY_FROM_MARKER, "0");
 				CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_G4_TRANSMITTER_BATTERY_VOLTAGE, "0");
+				CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_FSL_SENSOR_BATTERY_LEVEL, "0");
+				CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_BLUEREADER_BATTERY_LEVEL, "0");
+				CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_BLUKON_BATTERY_LEVEL, "0");
 			}
 			
 			private function NSLog_clickHandler(event:MouseEvent):void {
@@ -648,6 +722,174 @@
 				} else {
 					LocalSettings.setLocalSetting(LocalSettings.LOCAL_SETTING_NSLOG, "true");
 					nsLogOnOffText = ModelLocator.resourceManagerInstance.getString('settingsview','on');
+				}
+			}
+			
+			private function dexcomShareAccountName_clickHandler(event:MouseEvent):void {
+				rect49.color = uint("0xD3D3D3");
+				rect50.color = uint("0xD3D3D3");
+				setResetColorTimer();
+				
+				var alert:DialogView = Dialog.service.create(
+					new AlertBuilder()
+					.setTitle(ModelLocator.resourceManagerInstance.getString("settingsview","enter_dexcom_share_account_name_title"))
+					.setMessage(ModelLocator.resourceManagerInstance.getString("settingsview","enter_dexcom_share_account_name_message"))
+					.addTextField(dexcomShareAccountName,"")
+					.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
+					.addOption(ModelLocator.resourceManagerInstance.getString("general","cancel"), DialogAction.STYLE_CANCEL, 1)
+					.build()
+				);
+				DialogService.addDialog(alert);
+				alert.addEventListener(DialogViewEvent.CLOSED, dexcomshareaccountentered);
+				
+				function dexcomshareaccountentered(event:DialogViewEvent):void {
+					if (event.index == 1) {
+						return;
+					}
+					
+					if (event.values.length < 1)
+						return;
+					
+					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_DEXCOM_SHARE_ACCOUNTNAME, event.values[0] as String);
+					dexcomShareAccountName = event.values[0] as String;
+				}
+			}
+			
+			private function dexcomSharePassword_clickHandler(event:MouseEvent):void {
+				rect51.color = uint("0xD3D3D3");
+				rect52.color = uint("0xD3D3D3");
+				setResetColorTimer();
+				
+				var alert:DialogView = Dialog.service.create(
+					new AlertBuilder()
+					.setTitle(ModelLocator.resourceManagerInstance.getString("settingsview","enter_dexcom_share_password_title"))
+					.setMessage(ModelLocator.resourceManagerInstance.getString("settingsview","enter_dexcom_share_password_message"))
+					.addTextField(dexcomSharePassword,"", true)
+					.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
+					.addOption(ModelLocator.resourceManagerInstance.getString("general","cancel"), DialogAction.STYLE_CANCEL, 1)
+					.build()
+				);
+				DialogService.addDialog(alert);
+				alert.addEventListener(DialogViewEvent.CLOSED, dexcomsharepasswordentered);
+				
+				function dexcomsharepasswordentered(event:DialogViewEvent):void {
+					if (event.index == 1) {
+						return;
+					}
+					
+					if (event.values.length < 1)
+						return;
+					
+					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_DEXCOM_SHARE_PASSWORD, event.values[0] as String);
+					dexcomSharePassword = event.values[0] as String;
+					dexcomSharePasswordShownOnScreen = replaceByStars(dexcomSharePassword);
+				}
+			}
+
+			private function dexcomShareSerialNumber_clickHandler(event:MouseEvent):void {
+				rect53.color = uint("0xD3D3D3");
+				rect54.color = uint("0xD3D3D3");
+				setResetColorTimer();
+				
+				var alert:DialogView = Dialog.service.create(
+					new AlertBuilder()
+					.setTitle(ModelLocator.resourceManagerInstance.getString("settingsview","enter_dexcom_share_serialnumber_title"))
+					.setMessage(ModelLocator.resourceManagerInstance.getString("settingsview","enter_dexcom_share_serialnumber_message"))
+					.addTextField(dexcomShareSerialNumber,"")
+					.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
+					.addOption(ModelLocator.resourceManagerInstance.getString("general","cancel"), DialogAction.STYLE_CANCEL, 1)
+					.build()
+				);
+				DialogService.addDialog(alert);
+				alert.addEventListener(DialogViewEvent.CLOSED, dexcomshareserialnumberentered);
+				
+				function dexcomshareserialnumberentered(event:DialogViewEvent):void {
+					if (event.index == 1) {
+						return;
+					}
+					
+					if (event.values.length < 1)
+						return;
+					
+					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_DEXCOM_SHARE_SERIALNUMBER, event.values[0] as String);
+					dexcomShareSerialNumber = event.values[0] as String;
+				}
+			}
+			
+			private function dexcomShareOnOff_clickHandler(event:MouseEvent):void {
+				rect55.color = uint("0xD3D3D3");
+				rect56.color = uint("0xD3D3D3");
+				setResetColorTimer();
+				
+				if (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_DEXCOM_SHARE_ON) == "true") {
+					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_DEXCOM_SHARE_ON, "false");
+					dexcomShareOnOffText = ModelLocator.resourceManagerInstance.getString('settingsview','off');
+					changeDexcomShareStatus();
+				} else {
+					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_DEXCOM_SHARE_ON, "true");
+					dexcomShareOnOffText = ModelLocator.resourceManagerInstance.getString('settingsview','on');
+					changeDexcomShareStatus();
+				}
+			}
+			
+			private function dexcomShareURL_clickHandler(event:MouseEvent):void {
+				rect57.color = uint("0xD3D3D3");
+				rect58.color = uint("0xD3D3D3");
+				setResetColorTimer();
+				
+				if (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_DEXCOM_SHARE_US_URL) == "true") {
+					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_DEXCOM_SHARE_US_URL, "false");
+					dexcomShareURL = ModelLocator.resourceManagerInstance.getString('settingsview','dexcom_non_us_url');
+				} else {
+					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_DEXCOM_SHARE_US_URL, "true");
+					dexcomShareURL = ModelLocator.resourceManagerInstance.getString('settingsview','dexcom_us_url');
+				}
+			}
+			
+			private function changeDexcomShareStatus():void {
+				var enabled:Boolean = CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_DEXCOM_SHARE_ON) == "true";
+				if (enabled) {
+					dexcomShareAccountNameGroup.includeInLayout = true;
+					dexcomShareAccountNameGroup.visible = true;
+					dexcomShareAccountNameGroup.enabled = true;
+					dexcomSharePasswordGroup.includeInLayout = true;
+					dexcomSharePasswordGroup.enabled = true;
+					dexcomSharePasswordGroup.visible = true;
+					dexcomShareURLGroup.includeInLayout = true;
+					dexcomShareURLGroup.visible = true;
+					dexcomShareURLGroup.enabled = true;
+					dexcomshareline1.includeInLayout = true;dexcomshareline1.visible = true;
+					dexcomshareline3.includeInLayout = true;dexcomshareline3.visible = true;
+					dexcomshareline2.includeInLayout = true;dexcomshareline2.visible = true;
+
+					if (!BlueToothDevice.isDexcomG5()) {
+						dexcomShareSerialNumberGroup.includeInLayout = true;
+						dexcomShareSerialNumberGroup.enabled = true;
+						dexcomShareSerialNumberGroup.visible = true;
+						dexcomshareline4.includeInLayout = true;dexcomshareline4.visible = true;
+					} else {
+						dexcomShareSerialNumberGroup.includeInLayout = false;
+						dexcomShareSerialNumberGroup.enabled = false;
+						dexcomShareSerialNumberGroup.visible = false;
+						dexcomshareline4.includeInLayout = false;dexcomshareline4.visible = false;
+					}
+				} else {
+					dexcomShareAccountNameGroup.includeInLayout = false;
+					dexcomShareAccountNameGroup.visible = false;
+					dexcomShareAccountNameGroup.enabled = false;
+					dexcomSharePasswordGroup.includeInLayout = false;
+					dexcomSharePasswordGroup.enabled = false;
+					dexcomSharePasswordGroup.visible = false;
+					dexcomShareSerialNumberGroup.includeInLayout = false;
+					dexcomShareSerialNumberGroup.enabled = false;
+					dexcomShareSerialNumberGroup.visible = false;
+					dexcomShareURLGroup.includeInLayout = false;
+					dexcomShareURLGroup.visible = false;
+					dexcomShareURLGroup.enabled = false;
+					dexcomshareline1.includeInLayout = false;dexcomshareline1.visible = false;
+					dexcomshareline2.includeInLayout = false;dexcomshareline2.visible = false;
+					dexcomshareline3.includeInLayout = false;dexcomshareline3.visible = false;
+					dexcomshareline4.includeInLayout = false;dexcomshareline4.visible = false;
 				}
 			}
 			
@@ -706,6 +948,16 @@
 					rect46.color = uint("0x212121");//very high
 					rect47.color = uint("0x212121");//healthkitstore
 					rect48.color = uint("0x212121");//healthkitstore
+					rect49.color = uint("0x212121");//dexcom share accountname
+					rect50.color = uint("0x212121");//dexcom share accountname
+					rect51.color = uint("0x212121");//dexcom share password
+					rect52.color = uint("0x212121");//dexcom share password
+					rect53.color = uint("0x212121");//dexcom share serial number
+					rect54.color = uint("0x212121");//dexcom share serial number
+					rect55.color = uint("0x212121");//dexcom share onoff
+					rect56.color = uint("0x212121");//dexcom share onoff
+					rect57.color = uint("0x212121");//dexcom share onoff
+					rect58.color = uint("0x212121");//dexcom share onoff
 				}
 			}
 			
@@ -876,7 +1128,7 @@
 			</s:VGroup>
 			
 			<!-- Chapter general settings Subsection transmitter Id -->
-			<s:VGroup click="changeTransmitterId_clickHandler(event)" width="100%">
+			<s:VGroup id="groupTransmitterId" click="changeTransmitterId_clickHandler(event)" width="100%">
 				<s:HGroup width="100%">
 					<s:Rect height="100%" width="5" >
 						<s:fill>
@@ -1128,7 +1380,7 @@
 			<!-- Chapter Nightscout url and api secret --> 
 			<s:VGroup width="100%">
 				<!-- button to change url -->
-				<s:HGroup click="nightScoutUrl_clickHandler(event)" width="100%" verticalAlign="bottom" id="targetGroup">
+				<s:HGroup click="nightScoutUrl_clickHandler(event)" width="100%" verticalAlign="bottom">
 					<s:Rect height="100%" width="5" >
 						<s:fill>
 							<s:SolidColor color="#212121" id="rect1"/>
@@ -1163,6 +1415,126 @@
 					<s:Rect height="100%" width="5" >
 						<s:fill>
 							<s:SolidColor color="#212121" id="rect4"/>
+						</s:fill>
+					</s:Rect>
+				</s:HGroup>
+				<s:Line width="100%">
+					<s:stroke>
+						<s:SolidColorStroke color="#3B6999"  weight="3"/>
+					</s:stroke>
+				</s:Line>	
+			</s:VGroup>
+			
+			<!-- Chapter Dexcom Share -->
+			<s:Label text = "{ModelLocator.resourceManagerInstance.getString('settingsview','show_dexcomshare_title')}" textAlign="center" color="#3B6999" 
+					 width="100%" paddingLeft="3" paddingRight="0" fontSize="20" fontWeight="bold" paddingTop="10" paddingBottom ="10"/>
+			<s:Line width="100%">
+				<s:stroke>
+					<s:SolidColorStroke  color="#3B6999"  weight="3"/>
+				</s:stroke>
+			</s:Line>
+			
+			<!-- Chapter on/off button accountname, password and serial number --> 
+			<s:VGroup width="100%">
+				<!-- button to change dexcom share onoff -->
+				<s:HGroup click="dexcomShareOnOff_clickHandler(event)" width="100%" verticalAlign="bottom">
+					<s:Rect height="100%" width="5" >
+						<s:fill>
+							<s:SolidColor color="#212121" id="rect55"/>
+						</s:fill>
+					</s:Rect>
+					<s:Label text = "{ModelLocator.resourceManagerInstance.getString('settingsview','dexcomshareonoff')}" 
+							 width="100%" paddingLeft="0" paddingRight="0" paddingTop="10" paddingBottom="10" fontSize="18"/>
+					<s:Label text = "{dexcomShareOnOffText}"  
+							 paddingLeft="0" paddingRight="0" paddingTop="10" paddingBottom="10" fontSize="14"/>
+					<s:Rect height="100%" width="5" >
+						<s:fill>
+							<s:SolidColor color="#212121" id="rect56"/>
+						</s:fill>
+					</s:Rect>
+				</s:HGroup>
+				<s:Line width="100%"  id = "dexcomshareline3">
+					<s:stroke>
+						<s:SolidColorStroke color="0xFFFFFF" weight="1" alpha="0.25"/>
+					</s:stroke>
+				</s:Line>
+				<s:HGroup click="dexcomShareAccountName_clickHandler(event)" width="100%" verticalAlign="bottom" id = "dexcomShareAccountNameGroup">
+					<s:Rect height="100%" width="5" >
+						<s:fill>
+							<s:SolidColor color="#212121" id="rect49"/>
+						</s:fill>
+					</s:Rect>
+					<s:Label text = "{ModelLocator.resourceManagerInstance.getString('settingsview','dexcomshareaccountname')}" 
+							 width="100%" paddingLeft="0" paddingRight="0" paddingTop="10" paddingBottom="10" fontSize="18"/>
+					<s:Label text = "{dexcomShareAccountName}"  
+							 paddingLeft="0" paddingRight="0" paddingTop="10" paddingBottom="10" fontSize="14"/>
+					<s:Rect height="100%" width="5" >
+						<s:fill>
+							<s:SolidColor color="#212121" id="rect50"/>
+						</s:fill>
+					</s:Rect>
+				</s:HGroup>
+				<s:Line width="100%" id = "dexcomshareline1">
+					<s:stroke>
+						<s:SolidColorStroke color="0xFFFFFF" weight="1" alpha="0.25"/>
+					</s:stroke>
+				</s:Line>
+				<!-- button to change dexcom share password -->
+				<s:HGroup click="dexcomSharePassword_clickHandler(event)" width="100%" verticalAlign="bottom" id = "dexcomSharePasswordGroup">
+					<s:Rect height="100%" width="5" >
+						<s:fill>
+							<s:SolidColor color="#212121" id="rect51"/>
+						</s:fill>
+					</s:Rect>
+					<s:Label text = "{ModelLocator.resourceManagerInstance.getString('settingsview','dexcomsharepassword')}" 
+							 width="100%" paddingLeft="0" paddingRight="0" paddingTop="10" paddingBottom="10" fontSize="18"/>
+					<s:Label text = "{dexcomSharePasswordShownOnScreen}"  
+							 paddingLeft="0" paddingRight="0" paddingTop="10" paddingBottom="10" fontSize="14"/>
+					<s:Rect height="100%" width="5" >
+						<s:fill>
+							<s:SolidColor color="#212121" id="rect52"/>
+						</s:fill>
+					</s:Rect>
+				</s:HGroup>
+				<s:Line width="100%" id = "dexcomshareline2">
+					<s:stroke>
+						<s:SolidColorStroke color="0xFFFFFF" weight="1" alpha="0.25"/>
+					</s:stroke>
+				</s:Line>
+				<!-- button to change dexcom share url -->
+				<s:HGroup click="dexcomShareURL_clickHandler(event)" width="100%" verticalAlign="bottom" id = "dexcomShareURLGroup">
+					<s:Rect height="100%" width="5" >
+						<s:fill>
+							<s:SolidColor color="#212121" id="rect57"/>
+						</s:fill>
+					</s:Rect>
+					<s:Label text = "{dexcomShareURL}" width="100%"
+							 paddingLeft="0" paddingRight="0" paddingTop="10" paddingBottom="10" fontSize="18"/>
+					<s:Rect height="100%" width="5" >
+						<s:fill>
+							<s:SolidColor color="#212121" id="rect58"/>
+						</s:fill>
+					</s:Rect>
+				</s:HGroup>
+				<s:Line width="100%" id = "dexcomshareline4">
+					<s:stroke>
+						<s:SolidColorStroke color="0xFFFFFF" weight="1" alpha="0.25"/>
+					</s:stroke>
+				</s:Line>
+				<!-- button to change dexcom share serial number -->
+				<s:HGroup click="dexcomShareSerialNumber_clickHandler(event)" width="100%" verticalAlign="bottom" id = "dexcomShareSerialNumberGroup">
+					<s:Rect height="100%" width="5" >
+						<s:fill>
+							<s:SolidColor color="#212121" id="rect53"/>
+						</s:fill>
+					</s:Rect>
+					<s:Label text = "{ModelLocator.resourceManagerInstance.getString('settingsview','dexcomshareserialnumber')}" 
+							 width="100%" paddingLeft="0" paddingRight="0" paddingTop="10" paddingBottom="10" fontSize="18"/>
+					<s:Label text = "{dexcomShareSerialNumber}"  
+							 paddingLeft="0" paddingRight="0" paddingTop="10" paddingBottom="10" fontSize="14"/>
+					<s:Rect height="100%" width="5" >
+						<s:fill>
+							<s:SolidColor color="#212121" id="rect54"/>
 						</s:fill>
 					</s:Rect>
 				</s:HGroup>

@@ -34,9 +34,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 			import com.distriqt.extension.dialog.Dialog;
 			import com.distriqt.extension.dialog.DialogType;
 			import com.distriqt.extension.dialog.DialogView;
+			import com.distriqt.extension.dialog.PickerDialogView;
 			import com.distriqt.extension.dialog.builders.ActionSheetBuilder;
 			import com.distriqt.extension.dialog.builders.AlertBuilder;
 			import com.distriqt.extension.dialog.builders.DateTimeDialogBuilder;
+			import com.distriqt.extension.dialog.builders.PickerDialogBuilder;
 			import com.distriqt.extension.dialog.events.DialogDateTimeEvent;
 			import com.distriqt.extension.dialog.events.DialogViewEvent;
 			import com.distriqt.extension.dialog.objects.DialogAction;
@@ -222,18 +224,18 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 						event.data == CommonSettings.COMMON_SETTING_LOW_MARK) {
 						displayCurrentInfoFromReading();
 					} else if (event.data == CommonSettings.COMMON_SETTING_PERIPHERAL_TYPE) {
-						BlueToothDevice.forgetBlueToothDevice();
-						SettingsView.requestNewTransmitterId();
-						if (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_PERIPHERAL_TYPE) == "G5") {
-							BluetoothService.isDexcomG5 = true;
-							if (BluetoothLE.service.centralManager.state == BluetoothLEState.STATE_ON) {
-								if (!BluetoothLE.service.centralManager.isScanning) {
-									BluetoothService.startScanning();
-								}
+						if (BlueToothDevice.needsTransmitterId()) {
+							SettingsView.requestNewTransmitterId();
+						}
+						if (BlueToothDevice.alwaysScan()) {
+							scanningWasUserInitiated = false;
+							if (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_G5_INFO_SCREEN_SHOWN) == "false") {
 								showG5InfoScreen();
 							}
 						} else {
-							showG4InfoScreen();
+							if (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_G4_INFO_SCREEN_SHOWN) == "false") {
+								showG4InfoScreen();
+							}
 						}
 					}
 					
@@ -285,14 +287,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 				if (LocalSettings.getLocalSetting(LocalSettings.LOCAL_SETTING_CHART_RANGE_INFO_GIVEN) == "false") {
 					if (ModelLocator.bgReadings.length > 1) {
 						if ((ModelLocator.bgReadings.getItemAt(ModelLocator.bgReadings.length - 1) as BgReading).timestamp - (ModelLocator.bgReadings.getItemAt(0) as BgReading).timestamp > MINIMUM_HOURS_TO_SHOW_IN_CHART * 60 * 60 * 1000) {
-							var alert:DialogView = Dialog.service.create(
-								new AlertBuilder()
-								.setTitle(ModelLocator.resourceManagerInstance.getString('homeview',"info"))
-								.setMessage(ModelLocator.resourceManagerInstance.getString('homeview',"info_about_click_on_chart"))//info about buttons top right corner
-								.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-								.build()
-							);
-							DialogService.addDialog(alert);
+							DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString('homeview',"info"),
+								ModelLocator.resourceManagerInstance.getString('homeview',"info_about_click_on_chart"));
 							LocalSettings.setLocalSetting(LocalSettings.LOCAL_SETTING_CHART_RANGE_INFO_GIVEN,"true");
 						}
 					}
@@ -300,7 +296,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 			}
 			
 			public static function notificationServiceInitiated(ev:NotificationServiceEvent):void {
-				NotificationService.updateAllNotifications(null);
+				NotificationService.updateBgNotification(null);
 				if (DialogService.isInitiated) {
 					dialogServiceInitiated(null);
 					checkApplicationVersion(null);
@@ -310,7 +306,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 				}
 			}
 						
-			private static function peripheralTypeSelected(event:DialogViewEvent):void {
+			/*private static function peripheralTypeSelected(event:DialogViewEvent):void {
 				CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_INITIAL_SELECTION_G4_OR_G5_DONE, "true");
 				if (event.index== 1) {
 					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_PERIPHERAL_TYPE, "G5");
@@ -327,18 +323,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_PERIPHERAL_TYPE, "G4");
 					showG4InfoScreen();
 				}
-			}
+			}*/
 			
 			private static function showG4InfoScreen():void {
 				if (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_G4_INFO_SCREEN_SHOWN) == "false") {
-					var alert:DialogView = Dialog.service.create(
-						new AlertBuilder()
-						.setTitle(ModelLocator.resourceManagerInstance.getString('homeview',"info"))
-						.setMessage(ModelLocator.resourceManagerInstance.getString('homeview',"info_screen_1"))//info about buttons top right corner
-						.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-						.build()
-					);
-					DialogService.addDialog(alert);
+					DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString('homeview',"info"),
+						ModelLocator.resourceManagerInstance.getString('homeview',"info_screen_1"));
 					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_G4_INFO_SCREEN_SHOWN,"true");
 				}
 			}
@@ -349,49 +339,76 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 					if (Sensor.getActiveSensor() == null) {
 						message += "\n\n" + ModelLocator.resourceManagerInstance.getString('homeview',"info_screen_2_start_sensor");
 					}
-					var alert:DialogView = Dialog.service.create(
-						new AlertBuilder()
-						.setTitle(ModelLocator.resourceManagerInstance.getString('homeview',"info"))
-						.setMessage(message)//info about buttons top right corner
-						.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-						.build()
-					);
-					DialogService.addDialog(alert);
+					DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString('homeview',"info"),
+						message);
 					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_G5_INFO_SCREEN_SHOWN,"true");
 				}
 			}
 			
-			private static function dialogServiceInitiated(event:Event):void {
-				if (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_LICENSE_INFO_CONFIRMED) == "false") {
+			public static function dialogServiceInitiated(event:Event):void {
+				if (LocalSettings.getLocalSetting(LocalSettings.LOCAL_SETTING_LICENSE_INFO_ACCEPTED) == "false") {
 					var alert:DialogView = Dialog.service.create(
 						new AlertBuilder()
-						.setTitle("xDrip for iOS")
+						.setTitle("xDrip")
 						.setMessage(ModelLocator.resourceManagerInstance.getString('homeview', "licenseinfo"))//info about buttons top right corner
-						.addOption("Ok", DialogAction.STYLE_POSITIVE, 1)
+						.addOption(ModelLocator.resourceManagerInstance.getString('homeview', "iagree"), DialogAction.STYLE_POSITIVE, 0)
+						.addOption(ModelLocator.resourceManagerInstance.getString('homeview', "idontagree"), DialogAction.STYLE_CANCEL, 1)
 						.build()
 					);
 					alert.addEventListener(DialogViewEvent.CLOSED, licenseInfoConfirmed);
 					DialogService.addDialog(alert);
-					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_LICENSE_INFO_CONFIRMED,"true");
 				} else {
 					licenseInfoConfirmed(null);
 				}
 			}
 			
-			private static function licenseInfoConfirmed(ev:Event):void {
-				if (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_INITIAL_SELECTION_G4_OR_G5_DONE) == "false") {
-					var alert:DialogView = Dialog.service.create(
-						new AlertBuilder()
-						.setTitle(ModelLocator.resourceManagerInstance.getString('homeview',"selectG4_or_G5_title"))
-						.setMessage(ModelLocator.resourceManagerInstance.getString('homeview',"selectG4_or_G5"))//info about buttons top right corner
-						.addOption(ModelLocator.resourceManagerInstance.getString('general',"yes"), DialogAction.STYLE_POSITIVE, 1)
-						.addOption(ModelLocator.resourceManagerInstance.getString('general',"no"), DialogAction.STYLE_POSITIVE, 2)
-						.build()
-					);
-					alert.addEventListener(DialogViewEvent.CLOSED, peripheralTypeSelected);
-					alert.addEventListener(DialogViewEvent.CANCELLED, peripheralTypeSelected);
-					DialogService.addDialog(alert);
-					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_INITIAL_SELECTION_G4_OR_G5_DONE,"true");
+			private static function licenseInfoConfirmed(ev:DialogViewEvent):void {
+				if (ev != null) {
+					if (ev.index == 1) {
+						return;
+					}
+				}
+
+				LocalSettings.setLocalSetting(LocalSettings.LOCAL_SETTING_LICENSE_INFO_ACCEPTED,"true");
+
+				if (LocalSettings.getLocalSetting(LocalSettings.LOCAL_SETTING_SELECTION_UNIT_DONE) == "false") {
+					selectUnit();
+					LocalSettings.setLocalSetting(LocalSettings.LOCAL_SETTING_SELECTION_UNIT_DONE,"true");
+				} else {
+					if (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_INITIAL_SELECTION_PERIPHERAL_TYPE_DONE) == "false") {
+						SettingsView.changeTransmitterType();
+						CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_INITIAL_SELECTION_PERIPHERAL_TYPE_DONE,"true");
+					}
+				}
+			}
+			
+			private static function selectUnit():void {
+				var units:Array = new Array();
+				units.push(ModelLocator.resourceManagerInstance.getString('settingsview','mgdl'));
+				units.push(ModelLocator.resourceManagerInstance.getString('settingsview','mmol'));
+
+				var picker:PickerDialogView = Dialog.service.create(
+					new PickerDialogBuilder()
+					.setTitle(ModelLocator.resourceManagerInstance.getString('settingsview', 'select_unit'))
+					.setCancelLabel(ModelLocator.resourceManagerInstance.getString("general","cancel"))
+					.setAcceptLabel("Ok")
+					.addColumn(units)
+					.build()
+				);
+				
+				picker.addEventListener( DialogViewEvent.CLOSED, picker_closedHandler);
+				picker.show();
+				
+				function picker_closedHandler(event:DialogViewEvent): void {
+					if (event.values[0] == ModelLocator.resourceManagerInstance.getString('settingsview','mgdl')) {
+						CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_DO_MGDL, "true");
+					} else {
+						CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_DO_MGDL, "false");
+					}
+					if (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_INITIAL_SELECTION_PERIPHERAL_TYPE_DONE) == "false") {
+						SettingsView.changeTransmitterType();
+						CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_INITIAL_SELECTION_PERIPHERAL_TYPE_DONE,"true");
+					}
 				}
 			}
 			
@@ -402,23 +419,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 					peripheralConnected = true;
 					peripheralConnectionStatusChangeTimestamp = (new Date()).valueOf();
 				}
-				if (!(CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_PERIPHERAL_TYPE) == "G5")) {
-					NotificationService.updateAllNotifications(null);
-				}
 			}
 			
 			private function userInitiatedScanningSucceeded(event:PeripheralEvent):void {
 				if (scanningWasUserInitiated) {
 					scanningWasUserInitiated = false;
-					var alert:DialogView = Dialog.service.create(
-						new AlertBuilder()
-						.setTitle(ModelLocator.resourceManagerInstance.getString('homeview',"scan_for_device"))
-						.setMessage(ModelLocator.resourceManagerInstance.getString('homeview',"connected_to_peripheral_device_id_stored"))
-						.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-						
-						.build()
-					);
-					DialogService.addDialog(alert, 30);
+					DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString('homeview',"scan_for_device"),
+						ModelLocator.resourceManagerInstance.getString('homeview',"connected_to_peripheral_device_id_stored"),
+						30);
 				}
 			}
 			
@@ -427,9 +435,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 					myTrace("in central_peripheralDisconnectHandler, setting peripheralConnected = false");
 					peripheralConnected = false;
 					peripheralConnectionStatusChangeTimestamp = (new Date()).valueOf();
-				}
-				if (!(CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_PERIPHERAL_TYPE) == "G5")) {
-					NotificationService.updateAllNotifications(null);
 				}
 			}
 			
@@ -537,12 +542,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 				
 				actionsheetBuilder.addAction(ModelLocator.resourceManagerInstance.getString('homeview','view_device_status'), DialogAction.STYLE_DEFAULT, ACTION_SHEET_INDEX_FOR_STATUS);
 				
-				if (!BluetoothService.bluetoothPeripheralActive() && !BluetoothService.isDexcomG5) {
+				if (!BluetoothService.bluetoothPeripheralActive() && !BlueToothDevice.alwaysScan()) {
 					//this is the case where bluetoothdevice is known or not, time for a scan
 					actionsheetBuilder.addAction(ModelLocator.resourceManagerInstance.getString('homeview','scan_for_device'), DialogAction.STYLE_DEFAULT, ACTION_SHEET_INDEX_FOR_SCAN_FOR_DEVICE);
 				} 
 				
-				if (BlueToothDevice.known() && !BluetoothService.isDexcomG5) {
+				if (BlueToothDevice.known() && !BlueToothDevice.alwaysScan()) {
 					actionsheetBuilder.addAction(ModelLocator.resourceManagerInstance.getString('homeview','forget_device'), DialogAction.STYLE_DEFAULT, ACTION_SHEET_INDEX_FOR_FORGET_DEVICE);
 				}
 				
@@ -570,25 +575,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 						BluetoothLE.service.centralManager.addEventListener(PeripheralEvent.CONNECT, userInitiatedScanningSucceeded);
 						scanningWasUserInitiated = true;
 						BluetoothService.startScanning(true);
-						var alert:DialogView = Dialog.service.create(
-							new AlertBuilder()
-							.setTitle(ModelLocator.resourceManagerInstance.getString('homeview',"scan_for_device"))
-							.setMessage(ModelLocator.resourceManagerInstance.getString('homeview',"scanning_started_message"))
-							.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-							.build()
-						);
-						DialogService.addDialog(alert, 30);
+						DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString('homeview',"scan_for_device"),
+							ModelLocator.resourceManagerInstance.getString('homeview',"scanning_started_message"), 30);
+						
 						myTrace("in actionSheet_closedHandler, initial scan for device, setting systemIdleMode = SystemIdleMode.KEEP_AWAKE");
 						NativeApplication.nativeApplication.systemIdleMode = SystemIdleMode.KEEP_AWAKE;
 					} else {
-						var alert:DialogView = Dialog.service.create(
-							new AlertBuilder()
-							.setTitle(ModelLocator.resourceManagerInstance.getString('homeview',"scanning_failed_tile"))
-							.setMessage(ModelLocator.resourceManagerInstance.getString('homeview',"bluetooth_not_switched_on"))
-							.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-							.build()
-						);
-						DialogService.addDialog(alert, 30);
+						DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString('homeview',"scanning_failed_tile"),
+							ModelLocator.resourceManagerInstance.getString('homeview',"bluetooth_not_switched_on"),
+							30);
 					}
 				} else if (event.index == ACTION_SHEET_INDEX_FOR_FORGET_DEVICE) {
 					BlueToothDevice.forgetBlueToothDevice();
@@ -629,7 +624,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 					if (BlueToothDevice.known()) {
 						message += " " + BlueToothDevice.name;
 					} else {
-						message += " " + ModelLocator.resourceManagerInstance.getString('homeview','status_info_no_device_known');
+						message += " " + ModelLocator.resourceManagerInstance.getString('homeview','unknown');
 					}
 					message += "\n";
 					
@@ -642,7 +637,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 						dateFormatterForSensorStartTimeAndDate.format(new Date(peripheralConnectionStatusChangeTimestamp));
 					}
 					message += "\n";
-					if (BluetoothService.isDexcomG5) {
+					if (BlueToothDevice.isDexcomG5()) {
 						message += ModelLocator.resourceManagerInstance.getString('homeview','home_view_transmitter_status_info_G5_VOLTAGEA') + " " + 
 							CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_G5_VOLTAGEA);
 						if (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_G5_VOLTAGEA) != "unknown")
@@ -662,25 +657,51 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 						if (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_G5_RESIST) != "unknown")
 							message += " (" + (new Number(CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_G5_RESIST)) > G5Model.TransmitterStatus.RESIST_BAD ? "BAD":(new Number(CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_G5_RESIST)) > G5Model.TransmitterStatus.RESIST_NOTICE ? "NOTICE":(new Number(CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_G5_RESIST)) > G5Model.TransmitterStatus.RESIST_NORMAL ? "NORMAL":"GOOD"))) + 
 								")";
-					} else {
+					} else if (BlueToothDevice.isDexcomG4()) {
 						message += ModelLocator.resourceManagerInstance.getString('homeview','status_info_transmitter_battery_level');
 						var batteryLevel:String = CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_G4_TRANSMITTER_BATTERY_VOLTAGE);
 						if (batteryLevel == "0") {
-							batteryLevel = ModelLocator.resourceManagerInstance.getString('homeview','status_info_transmitter_battery_level_unknown');
+							batteryLevel = ModelLocator.resourceManagerInstance.getString('homeview','unknown');
 							message += " " + batteryLevel;
 						} else {
 							message += G4Model.TransmitterStatus.getBatteryLevel(new Number(batteryLevel));
 						}
+					} else if (BlueToothDevice.isBlueReader()) {
+						message += ModelLocator.resourceManagerInstance.getString('homeview','battery_level');
+						var batteryLevel:String = CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_BLUEREADER_BATTERY_LEVEL);
+						if (batteryLevel == "0") {
+							batteryLevel = ModelLocator.resourceManagerInstance.getString('homeview','unknown');
+							message += " " + batteryLevel;
+						} else {
+							message += (new Number(CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_BLUEREADER_BATTERY_LEVEL)))/1000;
+						}
+						
+					} else if (BlueToothDevice.isBluKon()) {
+						message += ModelLocator.resourceManagerInstance.getString('homeview','battery_level');
+						var batteryLevel:String = CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_BLUKON_BATTERY_LEVEL);
+						if (batteryLevel == "0") {
+							batteryLevel = ModelLocator.resourceManagerInstance.getString('homeview','unknown');
+							message += " " + batteryLevel;
+						} else {
+							message += (new Number(CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_BLUKON_BATTERY_LEVEL)))/1000;
+						}
 					}
 					
-					var alert:DialogView = Dialog.service.create(
-						new AlertBuilder()
-						.setTitle(ModelLocator.resourceManagerInstance.getString('homeview',"status_title"))
-						.setMessage(message)
-						.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-						.build()
-					);
-					DialogService.addDialog(alert, 60);
+					if (BlueToothDevice.isBluKon() || BlueToothDevice.isBlueReader()) {
+						message += '\n';
+						message += ModelLocator.resourceManagerInstance.getString('homeview','sensor_age');
+						var sensorAge:String = CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_FSL_SENSOR_AGE);
+						if (sensorAge == "0") {
+							sensorAge = ModelLocator.resourceManagerInstance.getString('homeview','unknown');
+							message += " " + sensorAge;
+						} else {
+							var sensorAgeInDays:int = (new Number(CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_FSL_SENSOR_AGE)))/1440;
+							message += " "+ sensorAgeInDays + " " + ModelLocator.resourceManagerInstance.getString('homeview','days');
+						}
+					}
+					
+					DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString('homeview',"status_title"),
+						message, 60);
 				}
 			}
 			
@@ -716,7 +737,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 					return;
 				}
 				Sensor.stopSensor();
-				NotificationService.updateAllNotifications(null);
+				NotificationService.updateBgNotification(null);
 				_calibrateButtonActive = false;
 			}
 			
@@ -771,14 +792,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 				var sensorStartTimeAsDate:Date = new Date(sensorStartYear, sensorStartMonth, sensorStartDate, sensorStartHours, sensorStartMinutes, sensorStartSeconds);
 				var sensorStartTime:Number = sensorStartTimeAsDate.valueOf();
 				if (sensorStartTime > (new Date()).valueOf() + 5 * 60 * 1000) {
-					var alert:DialogView = Dialog.service.create(
-						new AlertBuilder()
-						.setTitle(ModelLocator.resourceManagerInstance.getString('homeview',"start_sensor"))
-						.setMessage(ModelLocator.resourceManagerInstance.getString('homeview',"dont_start_with_time_in_future"))
-						.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-						.build()
-					);
-					DialogService.addDialog(alert, 60);
+					DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString('homeview',"start_sensor"),
+						ModelLocator.resourceManagerInstance.getString('homeview',"dont_start_with_time_in_future"),
+						60);
 				} else {
 					Sensor.startSensor(sensorStartTime);
 					var actualTime:Number = (new Date()).valueOf();
@@ -788,21 +804,16 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 					dateFormatterForSensorStartWarning.useUTC = false;
 					dateFormatterForSensorStartWarning.setStyle("locale",Capabilities.language.substr(0,2));
 					var message:String;
-					if (timeOfCalibration > 0) {
+					if (timeOfCalibration > 0 && !BlueToothDevice.isTypeLimitter()) {
 						message = ModelLocator.resourceManagerInstance.getString('homeview',"sensor_started_wait_needed_1");
 						message += " " + dateFormatterForSensorStartWarning.format(new Date(actualTime + timeOfCalibration)) + " ";
 						message += ModelLocator.resourceManagerInstance.getString('homeview',"sensor_started_wait_needed_2");
 					} else {
 						message = ModelLocator.resourceManagerInstance.getString('homeview',"sensor_started_no_wait_needed");
 					}
-					var alert:DialogView = Dialog.service.create(
-						new AlertBuilder()
-						.setTitle(ModelLocator.resourceManagerInstance.getString('homeview',"start_sensor"))
-						.setMessage(message)
-						.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-						.build()
-					);
-					DialogService.addDialog(alert, 60);
+					DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString('homeview',"start_sensor"),
+						message,
+						60);
 				}
 			}
 			
@@ -830,24 +841,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 				var currentVersion:String = LocalSettings.getLocalSetting(LocalSettings.LOCAL_SETTING_APPLICATION_VERSION);
 				if (currentVersion < newVersion) {
 					if (currentVersion <= '0.0.46') {
-						var alert:DialogView = Dialog.service.create(
-							new AlertBuilder()
-							.setTitle(ModelLocator.resourceManagerInstance.getString('homeview',"info"))
-							.setMessage(ModelLocator.resourceManagerInstance.getString('homeview',"info_additional_calibration_request_alert"))//info about buttons top right corner
-							.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-							.build()
-						);
-						DialogService.addDialog(alert);
+						DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString('homeview',"info"),
+							ModelLocator.resourceManagerInstance.getString('homeview',"info_additional_calibration_request_alert"));
 					}
 					if (currentVersion <= '0.0.53') {
-						var alert:DialogView = Dialog.service.create(
-							new AlertBuilder()
-							.setTitle(ModelLocator.resourceManagerInstance.getString('homeview',"info"))
-							.setMessage(ModelLocator.resourceManagerInstance.getString('homeview',"info_app_not_always_on_anymore"))
-							.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-							.build()
-						);
-						DialogService.addDialog(alert);
+						DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString('homeview',"info"),
+							ModelLocator.resourceManagerInstance.getString('homeview',"info_app_not_always_on_anymore"));
 					}
 					LocalSettings.setLocalSetting(LocalSettings.LOCAL_SETTING_APPLICATION_VERSION, newVersion); 
 				}
@@ -1021,14 +1020,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 						largeBGLabelGroup.includeInLayout = true;
 						largeBGLabelGroup.visible = true;
 						if (LocalSettings.getLocalSetting(LocalSettings.LOCAL_SETTING_INFO_ABOUT_LONG_PRESS_IN_HOME_SCREEN_GIVEN) == "false") {
-							var alert:DialogView = Dialog.service.create(
-								new AlertBuilder()
-								.setTitle(ModelLocator.resourceManagerInstance.getString('homeview',"info"))
-								.setMessage(ModelLocator.resourceManagerInstance.getString('homeview',"info_about_long_press_on_home_screen"))
-								.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-								.build()
-							);
-							DialogService.addDialog(alert);
+							DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString('homeview',"info"),
+								ModelLocator.resourceManagerInstance.getString('homeview',"info_about_long_press_on_home_screen"));
 							LocalSettings.setLocalSetting(LocalSettings.LOCAL_SETTING_INFO_ABOUT_LONG_PRESS_IN_HOME_SCREEN_GIVEN, "true");
 						}
 					}
@@ -1047,13 +1040,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 				if (!largeBGLabelGroup.includeInLayout)
 					return;
 				if (largeBGLabel.width > 1 * iosxdripreader.deviceScreenWidth) {
-					myTrace("in largeBGLabel_updateCompleteHandler, decreasing fontSizeForLargeBGLabel");
+					//myTrace("in largeBGLabel_updateCompleteHandler, decreasing fontSizeForLargeBGLabel");
 					fontSizeForLargeBGLabel = fontSizeForLargeBGLabel * 0.9;
 				} else if (largeBGLabel.width < 0.9 * iosxdripreader.deviceScreenWidth) {
 					if (largeBGLabel.height < 0.95 * largeBGLabelGroup.height) {
 						fontSizeForLargeBGLabel = fontSizeForLargeBGLabel * 1.1;
-						myTrace("in largeBGLabel_updateCompleteHandler, increasing fontSizeForLargeBGLabel to " + fontSizeForLargeBGLabel + ", largeBGLabel.height = " + largeBGLabel.height + ", largebglabelgroup.height= " + largeBGLabelGroup.height);
-						myTrace("labelheight = " + largeBGLabel.height);
+						//myTrace("in largeBGLabel_updateCompleteHandler, increasing fontSizeForLargeBGLabel to " + fontSizeForLargeBGLabel + ", largeBGLabel.height = " + largeBGLabel.height + ", largebglabelgroup.height= " + largeBGLabelGroup.height);
+						//myTrace("labelheight = " + largeBGLabel.height);
 					}
 				}  
 			}

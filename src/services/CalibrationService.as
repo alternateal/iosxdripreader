@@ -17,6 +17,7 @@ package services
 	import Utilities.Trace;
 	
 	import databaseclasses.BgReading;
+	import databaseclasses.BlueToothDevice;
 	import databaseclasses.Calibration;
 	import databaseclasses.CommonSettings;
 	import databaseclasses.Sensor;
@@ -75,6 +76,7 @@ package services
 				myTrace("in appInForeGround, app has fired a notification for initialcalibration, but app was opened before notification was received - or appInForeGround is triggered faster than the notification event");
 				initialCalibrationRequested = false;
 				requestInitialCalibration();
+				Notifications.service.cancel(NotificationService.ID_FOR_REQUEST_CALIBRATION);
 			}
 		}
 		
@@ -107,14 +109,8 @@ package services
 			if ((new Date()).valueOf() - latestReading.timestamp > MAXIMUM_WAIT_FOR_CALIBRATION_IN_SECONDS * 1000) {
 				myTrace("in requestInitialCalibration, but latest reading was more than MAXIMUM_WAIT_FOR_CALIBRATION_IN_SECONDS");
 				myTrace("app was opened via notification, opening warning dialog");
-				var alert:DialogView = Dialog.service.create(
-					new AlertBuilder()
-					.setTitle(ModelLocator.resourceManagerInstance.getString("calibrationservice","enter_calibration_title"))
-					.setMessage(ModelLocator.resourceManagerInstance.getString("calibrationservice","latest_reading_is_too_old"))
-					.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-					.build()
-				);
-				DialogService.addDialog(alert);
+				DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString("calibrationservice","enter_calibration_title"),
+					ModelLocator.resourceManagerInstance.getString("calibrationservice","latest_reading_is_too_old"));
 				return;
 			}
 
@@ -148,12 +144,9 @@ package services
 			//if there's already more than two calibrations, then there's no need anymore to request initial calibration
 			if (Calibration.allForSensor().length < 2) {
 				myTrace("Calibration.allForSensor().length < 2");
-				if ((new Date()).valueOf() - Sensor.getActiveSensor().startedAt < 2 * 3600 * 1000) {
+				if (((new Date()).valueOf() - Sensor.getActiveSensor().startedAt < 2 * 3600 * 1000) && !BlueToothDevice.isTypeLimitter()) {
 					myTrace("CalibrationService : bgreading received but sensor age < 2 hours, so ignoring");
 				} else {
-					//because the timer based function timerForWaitCalibration doesn't always work as expected
-					NotificationService.updateAllNotifications(null);
-					
 					//launch a notification
 					//don't do it via the notificationservice, this could result in the notification being cleared but not recreated (NotificationService.updateAllNotifications)
 					//the notification doesn't need to open any action, the dialog is create when the user opens the notification, or if the app is in the foreground, as soon as the notification is build. 
@@ -199,21 +192,12 @@ package services
 				return;
 			}
 			
-			//this will force clear of calibration request notification, if it exists
-			NotificationService.updateAllNotifications(null);
-			
 			var asNumber:Number = new Number((event.values[0] as String).replace(",","."));
 			if (isNaN(asNumber)) {
 				myTrace("in intialCalibrationValueEntered, user gave non numeric value, opening alert and requesting new value");
 				//add the warning message
-				var alert:DialogView = Dialog.service.create(
-					new AlertBuilder()
-					.setTitle(ModelLocator.resourceManagerInstance.getString("calibrationservice","invalid_value"))
-					.setMessage(ModelLocator.resourceManagerInstance.getString("calibrationservice","value_should_be_numeric"))
-					.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-					.build()
-				);
-				DialogService.addDialog(alert);
+				DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString("calibrationservice","invalid_value"),
+					ModelLocator.resourceManagerInstance.getString("calibrationservice","value_should_be_numeric"));
 				//and ask again a value
 				bgReadingReceived(null);
 			} else {
@@ -267,17 +251,14 @@ package services
 		 */
 		public static function calibrationOnRequest(override:Boolean = true, checklast30minutes:Boolean = true, addSnoozeOption:Boolean = false, snoozeFunction:Function = null):void {
 			myTrace(" in calibrationOnRequest");
+			//start with removing any calibration request notification that might be there
+			Notifications.service.cancel(NotificationService.ID_FOR_REQUEST_CALIBRATION);
+			Notifications.service.cancel(NotificationService.ID_FOR_CALIBRATION_REQUEST_ALERT);
 			//check if there's 2 readings the last 30 minutes
 			if (BgReading.last30Minutes().length < 2) {
 				myTrace(" in calibrationOnRequest, BgReading.last30Minutes().length < 2");
-				var alert:DialogView = Dialog.service.create(
-					new AlertBuilder()
-					.setTitle(ModelLocator.resourceManagerInstance.getString("calibrationservice","enter_calibration_title"))
-					.setMessage(ModelLocator.resourceManagerInstance.getString("calibrationservice","can_not_calibrate_right_now"))
-					.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-					.build()
-				);
-				DialogService.addDialog(alert, 60);
+				DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString("calibrationservice","enter_calibration_title"),
+					ModelLocator.resourceManagerInstance.getString("calibrationservice","can_not_calibrate_right_now"), 60);
 			} else { //check if it's an override calibration
 				if (((new Date()).valueOf() - (Calibration.latest(2).getItemAt(0) as Calibration).timestamp < (1000 * 60 * 60)) && override) {
 					var alert:DialogView = Dialog.service.create(
@@ -303,14 +284,9 @@ package services
 						} else if (event.index == 0) {
 							var asNumber:Number = new Number((event.values[0] as String).replace(",","."));
 							if (isNaN(asNumber)) {
-								var alert:DialogView = Dialog.service.create(
-									new AlertBuilder()
-									.setTitle(ModelLocator.resourceManagerInstance.getString("calibrationservice","enter_calibration_title"))
-									.setMessage(ModelLocator.resourceManagerInstance.getString("calibrationservice","value_should_be_numeric"))
-									.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-									.build()
-								);
-								DialogService.addDialog(alert);
+								DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString("calibrationservice","enter_calibration_title"),
+									ModelLocator.resourceManagerInstance.getString("calibrationservice","value_should_be_numeric"));
+
 								//and ask again a value
 								calibrationOnRequest(override);
 							} else {
@@ -353,14 +329,8 @@ package services
 						} else if (event.index == 2) {
 							var asNumber:Number = new Number((event.values[0] as String).replace(",","."));
 							if (isNaN(asNumber)) {
-								var alert:DialogView = Dialog.service.create(
-									new AlertBuilder()
-									.setTitle(ModelLocator.resourceManagerInstance.getString("calibrationservice","enter_calibration_title"))
-									.setMessage(ModelLocator.resourceManagerInstance.getString("calibrationservice","value_should_be_numeric"))
-									.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-									.build()
-								);
-								DialogService.addDialog(alert);
+								DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString("calibrationservice","enter_calibration_title"),
+									ModelLocator.resourceManagerInstance.getString("calibrationservice","value_should_be_numeric"));
 								//and ask again a value
 								calibrationOnRequest(override);
 							} else {
@@ -387,14 +357,8 @@ package services
 			var asNumber:Number = new Number((event.values[0] as String).replace(",","."));
 			if (isNaN(asNumber)) {
 				//add the warning message
-				var alert:DialogView = Dialog.service.create(
-					new AlertBuilder()
-					.setTitle(ModelLocator.resourceManagerInstance.getString("calibrationservice","invalid_value"))
-					.setMessage(ModelLocator.resourceManagerInstance.getString("calibrationservice","value_should_be_numeric"))
-					.addOption("Ok", DialogAction.STYLE_POSITIVE, 0)
-					.build()
-				);
-				DialogService.addDialog(alert);
+				DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString("calibrationservice","invalid_value"),
+					ModelLocator.resourceManagerInstance.getString("calibrationservice","value_should_be_numeric"));
 				//and ask again a value
 				initialCalibrate();
 			} else {

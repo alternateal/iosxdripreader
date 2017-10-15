@@ -1,14 +1,15 @@
-# connects to xDrip and G5
+# connects to xDrip, G5 and BlueReader
 
 
 
-xdrip/xbridge/G5 reader for iOS devices - 
+xdrip/xbridge/G5/Bluereader for iOS devices - 
 
 * Alerts
 * Chart
 * Always on notification (not really always but almost always) that allows to see the current value by just lifting up the phone (iOS 10).
 * Upload to Nightscout (works always for G5, for xDrip not recently tested since I don't use G4 anymore, there may be some delay in upload).
 * store values in HealthKit
+* upload to Dexcom share
 
 
 # Alerts
@@ -54,27 +55,26 @@ Alert Types can be re-used for different types of alerts.
 # To Install the app.
 
 The application is not available on iTunes and must be signed for your device.
-If you have an Apple Developer Account then you can easily do this yourself as described here : https://github.com/dabear/iphoneipa-resign
+If you have an Apple Developer Account then you can do this yourself using this tool https://dantheman827.github.io/ios-app-signer/
 The ipa file to download is here, take the latest release : https://github.com/JohanDegraeve/iosxdripreader/releases
 Regulary check for updates.
+You should enable Healthkit and Push notification in the Apple Developer portal, although push notification is not used anymore in the app. It would probably work also without it.
 
-If you don't have an Apple Developer Account, and you don't know anybody who can help you with this, you can ask me.
-Send my the UDID of your device in a mail please. (johan.degraeve@gmail.com).
-To retrieve your UDID you must use iTunes (apps don't give you the right UDID). Here you can find an explanation how to find the UDID http://whatsmyudid.com/ . Follow the instructions "iTunes".
-I'll update the latest release version with a release signed for your device.
+If you don't have an Apple Developer Account, or you don't succeed in resigning, then send my the UDID of your device in a mail please. (johan.degraeve@gmail.com).
 
-Then
+How to find UDID : https://www.innerfence.com/howto/find-iphone-unique-device-identifier-udid
 
+Once you have an IPA signed for UDID, you can install the app.
 Easist is if you have xCode on a Mac : Connect your iphone to your mac,
 Select "Window", "Devices", go to "Installed apps", click the + sign, then select the ipa file.
 
-Or if you don't have xCode you can use iTunes 
+Alternative for Mac is "Apple 2 Configurator". Download from Apple store, install, open, connect device, then "Add", "Apps", "Select from My Mac"
 
-* Open iTunes, select File > Add to Library and add the application IPA file to iTunes (or drag and drop it onto the iTunes dock icon).
-* Locate your new application in Apps. (see http://wwwimages.adobe.com/content/dam/Adobe/en/devnet/air/articles/packaging-air-apps-ios/fig_18.jpg)
-* Connect your iOS device to your computer's USB port.
-* In iTunes, select the attached device and make sure your application is selected to be synced on the device and then sync the device (see http://wwwimages.adobe.com/content/dam/Adobe/en/devnet/air/articles/packaging-air-apps-ios/fig_19.jpg)
-* Locate the application on the device and run it. (See http://wwwimages.adobe.com/content/dam/Adobe/en/devnet/air/articles/packaging-air-apps-ios/fig_20.jpg and http://wwwimages.adobe.com/content/dam/Adobe/en/devnet/air/articles/packaging-air-apps-ios/fig_20.jpg)
+Also working on Mac is http://www.i-funbox.com/en_download.html. Install, connect your iphone and chose "Install App"
+
+On Windows, try http://www.i-funbox.com/en_download.html, I haven't used it myself on PC.
+
+There is also a gitter room https://gitter.im/nightscout/iosxdripreader
 
 # To compile (only if you want to develop):
 - install Flash Builder 4.7 with FLex SDK 4.15.0, AIR 22.0 en_US
