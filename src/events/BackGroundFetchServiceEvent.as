@@ -17,14 +17,13 @@
  */
 package events
 {
-	[Event(name="LogInfo",type="events.BackGroundFetchServiceEvent")]
+	import flash.events.Event;
+
 	[Event(name="LoadRequestResult",type="events.BackGroundFetchServiceEvent")]
 	[Event(name="LoadRequestERror",type="events.BackGroundFetchServiceEvent")]
-	[Event(name="PerformFetch",type="events.BackGroundFetchServiceEvent")]
-	[Event(name="DeviceTokenReceived",type="events.BackGroundFetchServiceEvent")]
+	[Event(name="LoadRequestERror",type="events.BackGroundFetchServiceEvent")]
 
-
-	public class BackGroundFetchServiceEvent extends GenericEvent
+	public class BackGroundFetchServiceEvent extends Event
 	{
 		/**
 		 * load request was successful, data.information contains the result
@@ -34,15 +33,6 @@ package events
 		 * load request was successful, data.information contains the error
 		 */
 		public static const LOAD_REQUEST_ERROR:String = "LoadRequestERror";
-		/**
-		 * performFetch received
-		 */
-		public static const PERFORM_FETCH:String = "PerformFetch";
-		/**
-		 * ios has sent device token, the token itself is not in the event
-		 */
-		public static const DEVICE_TOKEN_RECEIVED:String = "DeviceTokenReceived";
-
 		public var data:*;
 
 		public function BackGroundFetchServiceEvent(type:String, bubbles:Boolean=false, cancelable:Boolean=false)

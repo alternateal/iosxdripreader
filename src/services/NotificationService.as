@@ -17,8 +17,6 @@
  */
 package services
 {
-	import com.distriqt.extension.application.Application;
-	import com.distriqt.extension.application.events.ApplicationStateEvent;
 	import com.distriqt.extension.core.Core;
 	import com.distriqt.extension.notifications.AuthorisationStatus;
 	import com.distriqt.extension.notifications.Notifications;
@@ -28,11 +26,13 @@ package services
 	import com.distriqt.extension.notifications.builders.NotificationBuilder;
 	import com.distriqt.extension.notifications.events.AuthorisationEvent;
 	import com.distriqt.extension.notifications.events.NotificationEvent;
+	import com.freshplanet.ane.AirBackgroundFetch.BackgroundFetch;
 	
 	import flash.desktop.NativeApplication;
 	import flash.desktop.SystemIdleMode;
 	import flash.events.Event;
 	import flash.events.EventDispatcher;
+	import flash.utils.Timer;
 	
 	import spark.components.TabbedViewNavigator;
 	
@@ -40,6 +40,7 @@ package services
 	import Utilities.Trace;
 	
 	import databaseclasses.BgReading;
+	import databaseclasses.BlueToothDevice;
 	import databaseclasses.Calibration;
 	import databaseclasses.CommonSettings;
 	import databaseclasses.LocalSettings;
@@ -48,12 +49,12 @@ package services
 	
 	import events.BlueToothServiceEvent;
 	import events.CalibrationServiceEvent;
+	import events.IosXdripReaderEvent;
+	import events.NightScoutServiceEvent;
 	import events.NotificationServiceEvent;
 	import events.TransmitterServiceEvent;
 	
 	import model.ModelLocator;
-	
-	import views.HomeView;
 	
 	/**
 	 * This service<br>
@@ -107,6 +108,14 @@ package services
 		public static const ID_FOR_CALIBRATION_REQUEST_ALERT:int = 11;
 		public static const ID_FOR_VERY_LOW_ALERT:int = 12;
 		public static const ID_FOR_VERY_HIGH_ALERT:int = 13;
+		public static const ID_FOR_PATCH_READ_ERROR_BLUKON:int = 14;
+		public static const ID_FOR_APP_UPDATE:int = 15;//used ?
+		public static const ID_FOR_DEAD_G5_BATTERY_INFO:int = 16;
+		public static const ID_FOR_BAD_PLACED_G5_INFO:int = 17;
+		public static const ID_FOR_OTHER_G5_APP:int = 18;
+		public static const ID_FOR_APPLICATION_INACTIVE_ALERT:int = 19;
+		public static const ID_FOR_DEAD_OR_EXPIRED_SENSOR_TRANSMITTER_PL:int = 20;
+		public static const ID_FOR_SENSOR_NOT_DETECTED_MIAOMIAO:int = 21;
 		
 		public static const ID_FOR_ALERT_LOW_CATEGORY:String = "LOW_ALERT_CATEGORY";
 		public static const ID_FOR_ALERT_HIGH_CATEGORY:String = "HIGH_ALERT_CATEGORY";
@@ -115,6 +124,7 @@ package services
 		public static const ID_FOR_ALERT_CALIBRATION_REQUEST_CATEGORY:String = "CALIBRATION_REQUEST_CATEGORY";
 		public static const ID_FOR_ALERT_VERY_LOW_CATEGORY:String = "VERY_LOW_ALERT_CATEGORY";
 		public static const ID_FOR_ALERT_VERY_HIGH_CATEGORY:String = "VERY_HIGH_ALERT_CATEGORY";
+		public static const ID_FOR_ALERT_MISSED_READING_CATEGORY:String = "MISSED_READING_ALERT_CATEGORY";
 
 		public static const ID_FOR_LOW_ALERT_SNOOZE_IDENTIFIER:String = "LOW_ALERT_SNOOZE_IDENTIFIER";
 		public static const ID_FOR_HIGH_ALERT_SNOOZE_IDENTIFIER:String = "HIGH_ALERT_SNOOZE_IDENTIFIER";
@@ -123,6 +133,10 @@ package services
 		public static const ID_FOR_CALIBRATION_REQUEST_ALERT_SNOOZE_IDENTIFIER:String = "CALIBRATION_REQUEST_SNOOZE_IDENTIFIER";
 		public static const ID_FOR_VERY_LOW_ALERT_SNOOZE_IDENTIFIER:String = "VERY_LOW_ALERT_SNOOZE_IDENTIFIER";
 		public static const ID_FOR_VERY_HIGH_ALERT_SNOOZE_IDENTIFIER:String = "VERY_HIGH_ALERT_SNOOZE_IDENTIFIER";
+		public static const ID_FOR_MISSED_READING_ALERT_SNOOZE_IDENTIFIER:String = "MISSED_READING_ALERT_SNOOZE_IDENTIFIER";
+		
+		private static var timeStampSinceLastNotifForPatchReadError:Number = 0;
+		public static var testTextToSpeechTimer:Timer;
 		
 		public function NotificationService()
 		{
@@ -134,7 +148,7 @@ package services
 		private static function deviceNotPaired(event:Event):void {
 			var titleText:String = ModelLocator.resourceManagerInstance.getString("notificationservice","device_not_paired_notification_title");
 			var bodyText:String = ModelLocator.resourceManagerInstance.getString("notificationservice","device_not_paired_body_text_background");
-			if (ModelLocator.isInForeground)
+			if (BackgroundFetch.appIsInForeground())
 				var bodyText:String = ModelLocator.resourceManagerInstance.getString("notificationservice","device_not_paired_body_text_foreground");
 			Notifications.service.cancel(ID_FOR_DEVICE_NOT_PAIRED);
 			Notifications.service.notify(
@@ -146,6 +160,25 @@ package services
 				.enableLights(true)
 				.enableVibration(true)
 				.build());
+		}
+		
+		private static function glucosePatchReadError(event:Event):void {
+			var titleText:String = ModelLocator.resourceManagerInstance.getString("notificationservice","glucose_patch_read_error_notification_title");
+			var bodyText:String = ModelLocator.resourceManagerInstance.getString("notificationservice","glucose_patch_read_error_body_text");
+			if ((new Date()).valueOf() - timeStampSinceLastNotifForPatchReadError > 5 * 60 * 1000) {
+				
+			} else {
+				timeStampSinceLastNotifForPatchReadError = (new Date()).valueOf();
+				Notifications.service.notify(
+					new NotificationBuilder()
+					.setId(ID_FOR_PATCH_READ_ERROR_BLUKON)
+					.setAlert("Blukon Error")
+					.setTitle(titleText)
+					.setBody(bodyText)
+					.enableLights(true)
+					.enableVibration(true)
+					.build());
+			}
 		}
 		
 		public static function init():void {
@@ -240,10 +273,22 @@ package services
 				)
 				.build()
 			);
+			service.categories.push(
+				new CategoryBuilder()
+				.setIdentifier(ID_FOR_ALERT_MISSED_READING_CATEGORY)
+				.addAction( 
+					new ActionBuilder()
+					.setTitle(ModelLocator.resourceManagerInstance.getString("notificationservice","snooze_for_snoozin_alarm_in_notification_screen"))
+					.setIdentifier(ID_FOR_MISSED_READING_ALERT_SNOOZE_IDENTIFIER)
+					.build()
+				)
+				.build()
+			);
 			
 			Notifications.service.setup(service);
 			
 			BluetoothService.instance.addEventListener(BlueToothServiceEvent.DEVICE_NOT_PAIRED, deviceNotPaired);
+			BluetoothService.instance.addEventListener(BlueToothServiceEvent.GLUCOSE_PATCH_READ_ERROR, glucosePatchReadError);
 			
 			//var object:Object = Notifications.service.authorisationStatus();
 			switch (Notifications.service.authorisationStatus())
@@ -280,48 +325,52 @@ package services
 			 * will obviously register and also add eventlisteners
 			 */
 			function register():void {
-				Notifications.service.addEventListener(NotificationEvent.NOTIFICATION_SELECTED, notificationHandler);
+				Notifications.service.addEventListener(NotificationEvent.NOTIFICATION_SELECTED, notificationSelectedHandler);
 				Notifications.service.addEventListener(NotificationEvent.NOTIFICATION, notificationHandler);
-				Notifications.service.addEventListener(NotificationEvent.ACTION, notificationHandler);
+				Notifications.service.addEventListener(NotificationEvent.ACTION, notificationActionHandler);
 				CalibrationService.instance.addEventListener(CalibrationServiceEvent.INITIAL_CALIBRATION_EVENT, updateBgNotification);
 				TransmitterService.instance.addEventListener(TransmitterServiceEvent.BGREADING_EVENT, updateBgNotification);
-				if (Application.isSupported) {
-					Application.service.addEventListener(ApplicationStateEvent.DEACTIVATE, application_deactivateHandler);
-				}
+				NightScoutService.instance.addEventListener(NightScoutServiceEvent.NIGHTSCOUT_SERVICE_BG_READING_RECEIVED, updateBgNotification);
+				iosxdripreader.instance.addEventListener(IosXdripReaderEvent.APP_IN_FOREGROUND, appInForeGround);
 				Notifications.service.register();
 				_instance.dispatchEvent(new NotificationServiceEvent(NotificationServiceEvent.NOTIFICATION_SERVICE_INITIATED_EVENT));
 				
 			}
 			
-			function application_deactivateHandler(event:ApplicationStateEvent):void {
-				myTrace("in application_deactivateHandler, event.code = " + event.code);
-				switch (event.code) 
-				{
-					case ApplicationStateEvent.CODE_LOCK:
-					case ApplicationStateEvent.CODE_HOME:
-						myTrace("in application_deactivateHandler setting ModelLocator.isInForeground = false");
-						ModelLocator.isInForeground = false;
-						myTrace("in application_deactivateHandler setting active window to Home screen");
-						(ModelLocator.navigator.parentNavigator as TabbedViewNavigator).selectedIndex = 0;
-						myTrace("in application_deactivateHandler, setting systemIdleMode = SystemIdleMode.NORMAL");
-						NativeApplication.nativeApplication.systemIdleMode = SystemIdleMode.NORMAL;
-					break;
-				}
+			function appInForeGround(event:Event):void {
+				myTrace("in appInForeGround, setting active window to Home screen");
+				(ModelLocator.navigator.parentNavigator as TabbedViewNavigator).selectedIndex = 0;
+				myTrace("in appInForeGround, setting systemIdleMode = SystemIdleMode.NORMAL");
+				NativeApplication.nativeApplication.systemIdleMode = SystemIdleMode.NORMAL;
+			}
+			
+			function notificationSelectedHandler(event:NotificationEvent):void {
+				myTrace("in notificationSelectedHandler at " + (new Date()).toLocaleTimeString());
+				var notificationServiceEvent:NotificationServiceEvent = new NotificationServiceEvent(NotificationServiceEvent.NOTIFICATION_SELECTED_EVENT);
+				notificationServiceEvent.data = event;
+				_instance.dispatchEvent(notificationServiceEvent);
 			}
 			
 			function notificationHandler(event:NotificationEvent):void {
-				myTrace("in Notificationservice notificationHandler at " + (new Date()).toLocaleTimeString());
+				myTrace("in notificationHandler at " + (new Date()).toLocaleTimeString());
 				var notificationServiceEvent:NotificationServiceEvent = new NotificationServiceEvent(NotificationServiceEvent.NOTIFICATION_EVENT);
 				notificationServiceEvent.data = event;
 				_instance.dispatchEvent(notificationServiceEvent);
 			}
-		}
-		
-		private static function dispatchInformation(information:String):void {
-			var notificationserviceEvent:NotificationServiceEvent = new NotificationServiceEvent(NotificationServiceEvent.LOG_INFO);
-			notificationserviceEvent.data = new Object();
-			notificationserviceEvent.data.information = information;
-			_instance.dispatchEvent(notificationserviceEvent);
+			
+			function notificationActionHandler(event:NotificationEvent):void {
+				myTrace("in notificationActionHandler at " + (new Date()).toLocaleTimeString());
+				var notificationServiceEvent:NotificationServiceEvent = new NotificationServiceEvent(NotificationServiceEvent.NOTIFICATION_ACTION_EVENT);
+				notificationServiceEvent.data = event;
+				_instance.dispatchEvent(notificationServiceEvent);
+			}
+			
+			function listener(event:Event):void {
+				myTrace("in listener");
+				BackgroundFetch.say("Hello there, how are you. I'm fine thanks", "en-US");
+			}
+			
+
 		}
 		
 		public static function updateBgNotification(be:Event = null):void {
@@ -329,24 +378,32 @@ package services
 			Notifications.service.cancel(ID_FOR_BG_VALUE);
 			
 			//start with bgreading notification
-			if (LocalSettings.getLocalSetting(LocalSettings.LOCAL_SETTING_ALWAYS_ON_NOTIFICATION) == "true" && !ModelLocator.isInForeground) {
+			if (LocalSettings.getLocalSetting(LocalSettings.LOCAL_SETTING_ALWAYS_ON_NOTIFICATION) == "true" && BackgroundFetch.appIsInBackground()) {
 				myTrace("in updateBgNotification notificatoin always on and not in foreground");
-				if (Calibration.allForSensor().length >= 2) {
+				if (Calibration.allForSensor().length >= 2 || BlueToothDevice.isFollower()) {
 					var lastBgReading:BgReading = BgReading.lastNoSensor(); 
 					var valueToShow:String = "";
 					myTrace("in updateBgNotification Calibration.allForSensor().length >= 2");
 					if (lastBgReading != null) {
 						myTrace("in updateBgNotification lastbgreading != null");
-						if (lastBgReading.calculatedValue != 0) {
-							if ((new Date().getTime()) - (60000 * 11) - lastBgReading.timestamp > 0) {
-								valueToShow = "---"
-							} else {
-								valueToShow = BgGraphBuilder.unitizedString(lastBgReading.calculatedValue, CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_DO_MGDL) == "true");
-								myTrace("in updateBgNotification value to show calculated");
-								if (!lastBgReading.hideSlope) {
-									valueToShow += " " + lastBgReading.slopeArrow();
+						if ((new Date()).valueOf() - lastBgReading.timestamp < 4.5 * 60 * 1000) {
+							if (lastBgReading.calculatedValue != 0) {
+								if ((new Date().getTime()) - (60000 * 11) - lastBgReading.timestamp > 0) {
+									valueToShow = "---"
+								} else {
+									valueToShow = BgGraphBuilder.unitizedString(lastBgReading.calculatedValue, CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_DO_MGDL) == "true");
+									myTrace("in updateBgNotification value to show calculated");
+									if (!lastBgReading.hideSlope) {
+										valueToShow += " " + lastBgReading.slopeArrow();
+									}
 								}
+								valueToShow += "      " + BgGraphBuilder.unitizedDeltaString(true, true);
 							}
+						} else {
+							//not giving notification if it's older than 4,5 minutes
+							//this can be the case for follower mode
+							myTrace("in updateBgNotification, timestamp of lastbgreading is older than 4.5 minutes");
+							return;
 						}
 					} else {
 						valueToShow = "---"
@@ -392,6 +449,22 @@ package services
 				returnValue = "ID_FOR_VERY_LOW_ALERT";
 			if (id == ID_FOR_VERY_HIGH_ALERT)
 				returnValue = "ID_FOR_VERY_HIGH_ALERT";
+			if (id == ID_FOR_PATCH_READ_ERROR_BLUKON)
+				returnValue = "ID_FOR_PATCH_READ_ERROR_BLUKON";
+			if (id == ID_FOR_APP_UPDATE)
+				returnValue = "ID_FOR_APP_UPDATE";
+			if (id == ID_FOR_DEAD_G5_BATTERY_INFO)
+				returnValue = "ID_FOR_DEAD_G5_BATTERY_INFO";
+			if (id == ID_FOR_BAD_PLACED_G5_INFO)
+				returnValue = "ID_FOR_BAD_PLACED_G5_INFO";
+			if (id == ID_FOR_OTHER_G5_APP)
+				returnValue = "ID_FOR_OTHER_G5_APP";
+			if (id == ID_FOR_APPLICATION_INACTIVE_ALERT)
+				returnValue = "ID_FOR_APPLICATION_INACTIVE_ALERT";
+			if (id == ID_FOR_DEAD_OR_EXPIRED_SENSOR_TRANSMITTER_PL)
+				returnValue = "ID_FOR_DEAD_OR_EXPIRED_SENSOR_TRANSMITTER_PL";
+			if (id == ID_FOR_SENSOR_NOT_DETECTED_MIAOMIAO)
+				returnValue = "ID_FOR_SENSOR_NOT_DETECTED_MIAOMIAO";
 			return returnValue;
 		}
 		

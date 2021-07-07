@@ -22,7 +22,11 @@ package databaseclasses
 {
 	import mx.collections.ArrayCollection;
 	
+	import spark.collections.Sort;
+	import spark.collections.SortField;
+	
 	import Utilities.BgGraphBuilder;
+	import Utilities.DateTimeUtilities;
 	import Utilities.Trace;
 	
 	import model.ModelLocator;
@@ -38,6 +42,7 @@ package databaseclasses
 		
 		
 		private var _sensor:Sensor;
+
 		public function get sensor():Sensor
 		{
 			return _sensor;
@@ -239,7 +244,24 @@ package databaseclasses
 		{
 			return _noise;
 		}
-		
+
+		private static var _dataSortFieldForBGReadings:SortField;
+		private static var _dataSortForBGReadings:Sort;
+		/**
+		 * sort ascending timestamp
+		 */
+		public static function get dataSortForBGReadings():Sort
+		{
+			if (_dataSortForBGReadings == null) {
+				_dataSortFieldForBGReadings = new SortField();
+				_dataSortFieldForBGReadings.name = "timestamp";
+				_dataSortFieldForBGReadings.numeric = true;
+				_dataSortFieldForBGReadings.descending = false;//ie ascending = from small to large
+				_dataSortForBGReadings = new Sort();
+				_dataSortForBGReadings.fields=[_dataSortFieldForBGReadings];
+			}
+			return _dataSortForBGReadings;
+		}
 		
 		/**
 		 * if bgreadingid = null, then a new value will be assigned by the constructor<br>
@@ -322,7 +344,7 @@ package databaseclasses
 		
 		/**
 		 * arraycollection will contain number of bgreadings with<br>
-		 * - sensor = current sensor<br>
+		 * - if ignoreSensorId = false, then return only readings for which sensor = current sensor<br>
 		 * - calculatedValule != 0<br>
 		 * - rawData != 0<br>
 		 * - latest 'number' that match these requirements<br>
@@ -330,16 +352,16 @@ package databaseclasses
 		 * <br>
 		 * could also be less than number, ie returnvalue could be arraycollection of size 0 
 		 */
-		public static function latest(number:int):ArrayCollection {
+		public static function latest(number:int, ignoreSensorId:Boolean = false):ArrayCollection {
 			var returnValue:ArrayCollection = new ArrayCollection();
 			var currentSensorId:String = CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_CURRENT_SENSOR);
-			if (currentSensorId != "0") {
+			if (currentSensorId != "0" || ignoreSensorId) {
 				var cntr:int = ModelLocator.bgReadings.length - 1;
 				var itemsAdded:int = 0;
 				while (cntr > -1 && itemsAdded < number) {
 					var bgReading:BgReading = ModelLocator.bgReadings.getItemAt(cntr) as BgReading;
-					if (bgReading.sensor != null) {
-						if (bgReading.sensor.uniqueId == currentSensorId && bgReading.calculatedValue != 0 && bgReading.rawData != 0) {
+					if (bgReading.sensor != null || ignoreSensorId) {
+						if ((ignoreSensorId || bgReading.sensor.uniqueId == currentSensorId) && bgReading.calculatedValue != 0 && bgReading.rawData != 0) {
 							returnValue.addItem(bgReading);
 							itemsAdded++;
 						}
@@ -414,7 +436,7 @@ package databaseclasses
 		/**
 		 * - rawData != 0<br>
 		 * - calculatedValule != 0<br>
-		 * - latest
+		 * - latest<br>
 		 * - null if there's none i guess
 		 */
 		public static function lastNoSensor():BgReading {
@@ -423,6 +445,25 @@ package databaseclasses
 			while (cntr > -1) {
 				var bgReading:BgReading = ModelLocator.bgReadings.getItemAt(cntr) as BgReading;
 				if (bgReading.rawData != 0 && bgReading.calculatedValue != 0) {
+					returnValue = bgReading;
+					break;
+				}
+				cntr--;
+			}
+			return returnValue;
+		}
+		
+	    /**
+		 * - calculatedValule != 0<br>
+		 * - latest<br>
+		 * - null if there's none
+		 */
+		public static function lastWithCalculatedValue():BgReading {
+			var returnValue:BgReading;
+			var cntr:int = ModelLocator.bgReadings.length - 1;
+			while (cntr > -1) {
+				var bgReading:BgReading = ModelLocator.bgReadings.getItemAt(cntr) as BgReading;
+				if (bgReading.calculatedValue != 0) {
 					returnValue = bgReading;
 					break;
 				}
@@ -585,13 +626,16 @@ package databaseclasses
 		/**
 		 * stores in ModelLocator but not in database ! 
 		 */
-		public static function create(rawData:Number, filteredData:Number):BgReading {
-			myTrace("start of create bgreading with rawdata = " + rawData + ", and filtereddata = " + filteredData);
+		public static function create(rawData:Number, filteredData:Number, timeStamp:Number = Number.NaN):BgReading {
+			var timestamp:Number = timeStamp;
+			if (isNaN(timeStamp)) {
+				timestamp = (new Date()).valueOf();
+			}
+			
+			myTrace("start of create bgreading with rawdata = " + rawData + ", and filtereddata = " + filteredData + ", timestamp = " + (new Date(timestamp)).toString());
 			var sensor:Sensor = Sensor.getActiveSensor();
 			var calibration:Calibration = Calibration.last();
 
-			var timestamp:Number = (new Date()).valueOf();
-			
 			var bgReading:BgReading = (new BgReading(
 				timestamp,
 				sensor,//sensor
@@ -616,7 +660,7 @@ package databaseclasses
 				null//bgreading id will be assigned by constructor
 			)).calculateAgeAdjustedRawValue();
 			
-			ModelLocator.addBGReading(bgReading);
+			ModelLocator.addBGReading(bgReading, true);
 
 			if (calibration == null) {
 				//No calibration yet
@@ -630,12 +674,16 @@ package databaseclasses
 					bgReading.filteredCalculatedValue = (((calSlope * bgReading.ageAdjustedRawValue) + calIntercept) -5);
 					
 				} else {
-					var lastBgReading:BgReading = (BgReading.latest(1))[0] as BgReading;
-					if (lastBgReading != null && lastBgReading.calibration != null) {
-						if (lastBgReading.calibrationFlag == true && ((lastBgReading.timestamp + (60000 * 20)) > timestamp) && ((lastBgReading.calibration.timestamp + (60000 * 20)) > timestamp)) {
-							lastBgReading.calibration
-								.rawValueOverride(BgReading.weightedAverageRaw(lastBgReading.timestamp, timestamp, lastBgReading.calibration.timestamp, lastBgReading.ageAdjustedRawValue, bgReading.ageAdjustedRawValue))
-								.updateInDatabaseSynchronous();
+					var lastBgReading:BgReading = null;
+					var lastBgReadings:ArrayCollection = BgReading.latest(1);
+					if (lastBgReadings.length > 0) {
+						lastBgReading = (BgReading.latest(1))[0] as BgReading;
+						if (lastBgReading != null && lastBgReading.calibration != null) {
+							if (lastBgReading.calibrationFlag == true && ((lastBgReading.timestamp + (60000 * 20)) > timestamp) && ((lastBgReading.calibration.timestamp + (60000 * 20)) > timestamp)) {
+								lastBgReading.calibration
+									.rawValueOverride(BgReading.weightedAverageRaw(lastBgReading.timestamp, timestamp, lastBgReading.calibration.timestamp, lastBgReading.ageAdjustedRawValue, bgReading.ageAdjustedRawValue))
+									.updateInDatabaseSynchronous();
+							}
 						}
 					}
 					bgReading.calculatedValue = ((calibration.slope * bgReading.ageAdjustedRawValue) + calibration.intercept);
@@ -685,8 +733,8 @@ package databaseclasses
 		/**
 		 * no database update ! 
 		 */
-		public function findSlope():void {
-			var last2:ArrayCollection = BgReading.latest(2);
+		public function findSlope(ignoreSensorId:Boolean = false):void {
+			var last2:ArrayCollection = BgReading.latest(2, ignoreSensorId);
 			
 			_hideSlope = true;
 			if (last2.length == 2) {
@@ -713,7 +761,6 @@ package databaseclasses
 			}
 			var adjust_for:Number = AGE_ADJUSTMENT_TIME - (timestamp - sensor.startedAt);
 			if (adjust_for <= 0 || BlueToothDevice.isTypeLimitter()) {
-				myTrace("in calculateAgeAdjustedRawValue, istypelimitter, not applying age adjustment");
 				_ageAdjustedRawValue = rawData;
 			} else {
 				_ageAdjustedRawValue = ((AGE_ADJUSTMENT_FACTOR * (adjust_for / AGE_ADJUSTMENT_TIME)) * rawData) + rawData;
@@ -787,7 +834,7 @@ package databaseclasses
 
 		public static function slopeToArrowSymbol(slope:Number):String {
 			if (slope <= (-3.5)) {
-				return "\u21ca";
+				return "\u2193\u2193";
 			} else if (slope <= (-2)) {
 				return "\u2193";
 			} else if (slope <= (-1)) {
@@ -799,7 +846,7 @@ package databaseclasses
 			} else if (slope <= (3.5)) {
 				return "\u2191";
 			} else {
-				return "\u21c8";
+				return "\u2191\u2191";
 			}
 		}
 		
@@ -859,8 +906,11 @@ package databaseclasses
 			}
 		}
 	
-		public static function currentSlope():Number {
-			var last_2:ArrayCollection = BgReading.latest(2);
+		/**
+		 * if  ignoreSensorId = true, then calculations takes into account only readings that have sensor id = current sensor id
+		 */
+		public static function currentSlope(ignoreSensorId:Boolean = false):Number {
+			var last_2:ArrayCollection = BgReading.latest(2, ignoreSensorId);
 			if (last_2.length == 2) {
 				var slopePair:Array = calculateSlope(last_2.getItemAt(0) as BgReading, last_2.getItemAt(1) as BgReading);
 				return slopePair[0] as Number;
@@ -869,5 +919,28 @@ package databaseclasses
 			}
 		}
 		
+		public static function getForPreciseTimestamp(timestamp:Number, precision:Number, lock_to_sensor:Boolean = true):BgReading {
+			var activeSensor:Sensor = Sensor.getActiveSensor();
+			var returnValue:BgReading = null;
+			var cntr:int = ModelLocator.bgReadings.length - 1;
+			if ((activeSensor != null) || (!lock_to_sensor)) {
+				while (cntr > -1 && returnValue == null) {
+					var bgReading:BgReading = ModelLocator.bgReadings.getItemAt(cntr) as BgReading;
+					if ( (timestamp - precision <= bgReading.timestamp) 
+						&& 
+						(bgReading.timestamp >= timestamp + precision)
+						&&
+						(lock_to_sensor ? bgReading.sensor.uniqueId == activeSensor.uniqueId : bgReading.timestamp > 0) ) {
+						returnValue = bgReading;
+					}
+					cntr--;
+				}
+			}
+			if (returnValue == null)
+				myTrace("getForPreciseTimestamp: No luck finding a BG timestamp match: " + DateTimeUtilities.createNSFormattedDateAndTime(new Date(timestamp)) + ", precision:" + precision + ", Sensor: " + ((activeSensor == null) ? "null" : activeSensor.uniqueId));
+			return returnValue;
+		}
+		
+
 	}
 }

@@ -332,10 +332,8 @@ package databaseclasses
 			return returnValue;
 		}
 		
-		/**
-		 * bg1 must be before bg2, this is not checked by initialCalibration 
-		 */
-		public static function initialCalibration(bg1:Number, timestampCalibration1:Number, bg2:Number, timestampCalibration2:Number):void {
+		public static function initialCalibration(bg1:Number, timestampCalibration1:Number, timestampCalibration2:Number, numAdjustedReadings:int = 5):void {
+			var bg2:Number = bg1;
 			myTrace("start initialCalibration");
 			//TODO take unit from settings
 			var unit:String = "mgdl";
@@ -434,10 +432,10 @@ package databaseclasses
 			//myTrace("before adjustbgreadings bgReading1 = " + bgReading1.print("   "));
 			//myTrace("before adjustbgreadings bgReading2 = " + bgReading2.print("   "));
 			var latest3Calibrations:ArrayCollection = new ArrayCollection();
-			latest3Calibrations.addItem(calibration2);//the second is the latest, this one comes first, so it will be sorted from large to small
-			latest3Calibrations.addItem(calibration1);
+			latest3Calibrations.addItem(calibration1);//the first is the latest, this one comes first, so it will be sorted from large to small
+			latest3Calibrations.addItem(calibration2);
 			
-			adjustRecentBgReadings(5, latest3Calibrations);
+			adjustRecentBgReadings(numAdjustedReadings, latest3Calibrations);
 			//myTrace("after adjustbgreadings");
 			//myTrace("End of initialCalibration bgReading1 = " + bgReading1.print("   "));
 			//myTrace("End of initialCalibration bgReading2 = " + bgReading2.print("   "));

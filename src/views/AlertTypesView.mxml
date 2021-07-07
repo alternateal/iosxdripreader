@@ -21,6 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 		xmlns:s="library://ns.adobe.com/flex/spark" title="">
 	<fx:Metadata>
 		[ResourceBundle("alerttypesview")]
+		[ResourceBundle("alerttypeview")]
 	</fx:Metadata>
 
 	<fx:Script>
@@ -112,17 +113,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 				if (deleteClicked) {
 					deleteClicked = false;
 					var alarmNameOfItemToDelete:String = (listOfElements.getItemAt(event.newIndex) as AlertType).alarmName;
-					for (var cntr2:int = CommonSettings.COMMON_SETTING_LOW_ALERT; cntr2 < CommonSettings.COMMON_SETTING_MISSED_READING_ALERT + 1;cntr2++) {
-						var setting:String = CommonSettings.getCommonSetting(cntr2);
-						var listOfAlertsInTheSetting:FromtimeAndValueArrayCollection =  FromtimeAndValueArrayCollection.createList(setting, false);
-						for (var cntr3:int = 0;cntr3 < listOfAlertsInTheSetting.length;cntr3++) {
-							var fromTimeAndValue:FromtimeAndValue = listOfAlertsInTheSetting.getItemAt(cntr3) as FromtimeAndValue;
-							if (fromTimeAndValue.alarmName.toUpperCase() == alarmNameOfItemToDelete.toUpperCase()) {
-								DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString("alerttypesview","delete_alert_type"),
-									ModelLocator.resourceManagerInstance.getString("alerttypesview","alerttype_still_used"));
-								return;
-							}
-						}
+					if (AlertType.alertTypeUsed(alarmNameOfItemToDelete)) {
+						DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString("alerttypesview","delete_alert_type"),
+							ModelLocator.resourceManagerInstance.getString("alerttypesview","alerttype_still_used"));
+						return;
 					}
 					Database.deleteAlertTypeSynchronous(listOfElements.getItemAt(event.newIndex) as AlertType);
 					listOfElements.removeItemAt(event.newIndex);
@@ -154,7 +148,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 					}
 				}
 				defaultAlarmName += "_" + namecntr;
-				var newAlertType:AlertType = new AlertType(null, Number.NaN, defaultAlarmName, false, false, false, false, false, "default", 5, 0);
+				var soundsAsDisplayed:String = ModelLocator.resourceManagerInstance.getString("alerttypeview","sound_names_as_displayed_can_be_translated_must_match_above_list");
+				var soundsAsDisplayedSplitted:Array = soundsAsDisplayed.split(',');
+				var defaultSoundName:String = soundsAsDisplayedSplitted[0];
+				var newAlertType:AlertType = new AlertType(null, Number.NaN, defaultAlarmName, false, false, false, false, false, defaultSoundName, 5, 0);
 				dataToSend.alertType = newAlertType;
 				navigator.pushView(AlertTypeView, dataToSend);
 			}

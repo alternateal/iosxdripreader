@@ -30,6 +30,7 @@
 	 public class CommonSettings extends EventDispatcher
 	 {
 		 [ResourceBundle("settingsview")]
+		 [ResourceBundle("general")]
 		 
 		 private static var _instance:CommonSettings = new CommonSettings();
 
@@ -37,6 +38,8 @@
 		 {
 			 return _instance;
 		 }
+		 
+		 public static const GITHUB_REPO_API_URL:String = "https://api.github.com/repos/JohanDegraeve/iosxdripreader/releases/latest";
 		 
 		 /**
 		 * Witout https:// and without /api/v1/treatments<br>
@@ -71,7 +74,7 @@
 		 /**
 		 * 0 = never synced 
 		  */
-		 public static const COMMON_SETTING_NIGHTSCOUT_SYNC_TIMESTAMP:int = 7;
+		 public static const COMMON_SETTING_NIGHTSCOUT_UPLOAD_BGREADING_TIMESTAMP:int = 7;
 		 /**
 		 * not used anymore
 		  */
@@ -106,6 +109,8 @@
 		 * Limitter<br>
 		 * Bluereader<br>
 		 * BluKon<br>
+		 * Follow<br>
+		 * Transmiter PL<br>
 		 * <br>
 		 * Default value is an empty string, peripheral type unknown
 		  */
@@ -176,14 +181,14 @@
 		  */
 		 public static const COMMON_SETTING_FSL_SENSOR_BATTERY_LEVEL:int = 36;
 		 /**
-		  * For limitter and/or bluereaderw<br>
+		  * For bluereaderw<br>
 		  * value 0 means level not known
 		  */
 		 public static const COMMON_SETTING_BLUEREADER_BATTERY_LEVEL:int = 37;
 		 /**
-		  * For limitter and/or bluereaderw<br>
+		  * For any device that reads Freestyle (bluerader, blukon, transmiter pl, miaomiao<br>
 		  * value 0 means level not known<br>
-		  * time in minutes
+		  * time in minutes<br>
 		  */
 		 public static const COMMON_SETTING_FSL_SENSOR_AGE:int = 38;
 		 /**
@@ -202,6 +207,27 @@
 		 public static const COMMON_SETTING_DEXCOM_SHARE_PASSWORD:int = 43;
 		 public static const COMMON_SETTING_DEXCOM_SHARE_ON:int = 44;
 		 public static const COMMON_SETTING_DEXCOM_SHARE_US_URL:int = 45;
+		 public static const COMMON_SETTING_BLUKON_INFO_SCREEN_SHOWN:int = 46;
+		 public static const COMMON_SETTING_NIGHTSCOUT_UPLOAD_CALIBRATION_TIMESTAMP:int = 47;
+		 public static const COMMON_SETTING_BLUKON_EXTERNAL_ALGORITHM:int = 48;
+		 public static const COMMON_SETTING_SPEAK_READINGS_ON:int = 49;
+		 public static const COMMON_SETTING_SPEAK_READINGS_INTERVAL:int = 50;
+		 public static const COMMON_SETTING_SPEAK_TREND_ON:int = 51;
+		 public static const COMMON_SETTING_SPEAK_DELTA_ON:int = 52;
+		 public static const COMMON_SETTING_APP_UPDATE_NOTIFICATIONS_ON:int = 53;//Not used anymore
+		 public static const COMMON_SETTING_APP_UPDATE_LAST_UPDATE_CHECK:int = 54;
+		 public static const COMMON_SETTING_APP_UPDATE_IGNORE_UPDATE:int = 55;
+		 public static const COMMON_SETTING_APP_UPDATE_USER_GROUP:int = 56;
+		 public static const COMMON_SETTING_LANGUAGE:int = 57;
+		 public static const COMMON_SETTING_NFC_AGE_PROBEM:int = 58;
+		 /**
+		 * value 0 means unknown
+		  */
+		 public static const COMMON_SETTING_MIAOMIAO_BATTERY_LEVEL:int = 59;
+		 public static const COMMON_SETTING_MIAOMIAO_HARDWARE:int = 60;
+		 public static const COMMON_SETTING_MIAOMIAO_FW:int = 61;
+		 
+		 public static const COMMON_SETTING_ISG6:int = 62;
 
 		 private static var commonSettings:Array = [
 			 "0",//COMMON_SETTING_CURRENT_SENSOR
@@ -225,8 +251,8 @@
 			 "false",//COMMON_SETTING_INITIAL_SELECTION_PERIPHERAL_TYPE_DONE
 			 "false",//COMMON_SETTING_LICENSE_INFO_CONFIRMED
 			 "0",//COMMON_SETTING_TIME_SINCE_LAST_QUICK_BLOX_SUBSCRIPTION
-			 "00:00>70>DefaultNoAlertToBeReplaced",//COMMON_SETTING_LOW_ALERT
-			 "00:00>170>DefaultNoAlertToBeReplaced",//COMMON_SETTING_HIGH_ALERT
+			 "00:00>70>DefaultxDripAlertToBeReplaced",//COMMON_SETTING_LOW_ALERT
+			 "00:00>170>DefaultxDripAlertToBeReplaced",//COMMON_SETTING_HIGH_ALERT
 			 "00:00>30>DefaultNoAlertToBeReplaced",//COMMON_SETTING_MISSED_READING_ALERT
 			 "00:00>0>DefaultNoAlertToBeReplaced-21:00>0>SilentToBeReplaced",//COMMON_SETTING_PHONE_MUTED_ALERT
 			 "unknown",//COMMON_SETTING_G5_STATUS
@@ -249,7 +275,24 @@
 			 "account name",//COMMON_SETTING_DEXCOM_SHARE_ACCOUNTNAME
 			 "password",//COMMON_SETTING_DEXCOM_SHARE_PASSWORD
 			 "false",//COMMON_SETTING_DEXCOM_SHARE_ON
-			 "false"//COMMON_SETTING_DEXCOM_SHARE_US_URL
+			 "false",//COMMON_SETTING_DEXCOM_SHARE_US_URL
+			 "false",//COMMON_SETTING_BLUKON_INFO_SCREEN_SHOWN
+			 "0",//COMMON_SETTING_NIGHTSCOUT_UPLOAD_CALIBRATION_TIMESTAMP
+			 "false",//COMMON_SETTING_BLUKON_EXTERNAL_ALGORITHM
+			 "false",//COMMON_SETTING_SPEAK_READINGS_ON
+			 "1",//COMMON_SETTING_SPEAK_READINGS_INTERVAL
+			 "false",//COMMON_SETTING_SPEAK_TREND_ON
+			 "false",//COMMON_SETTING_SPEAK_DELTA_ON
+			 "true",//COMMON_SETTING_APP_UPDATE_NOTIFICATIONS_ON - NOT USED ANYMORE
+			 "0",//COMMON_SETTING_APP_UPDATE_LAST_UPDATE_CHECK
+			 "",//COMMON_SETTING_APP_UPDATE_IGNORE_UPDATE
+			 "",//COMMON_SETTING_APP_UPDATE_USER_GROUP
+			 "default",//COMMON_SETTING_LANGUAGE
+			 "false",//COMMON_SETTING_NFC_AGE_PROBEM
+			 "0",//COMMON_SETTING_MIAOMIAO_BATTERY_LEVEL
+			 "",//COMMON_SETTING_MIAOMIAO_HARDWARE
+			 "",//COMMON_SETTING_MIAOMIAO_FW
+			 "false"//COMMON_SETTING_ISG6
 		 ];
 		 
 		 public function CommonSettings()
@@ -264,8 +307,10 @@
 			 var newString:String;
 			 if (commonSettingId == COMMON_SETTING_BATTERY_ALERT) {
 				 if ((commonSettings[COMMON_SETTING_BATTERY_ALERT] as String).indexOf('DefaultValue') > -1) {
+					 //actually the alert value is reset when user changes the transmittertype, which is each time the app starts
+					 //as a result this branch is not useful anymore
 					 newString = (commonSettings[COMMON_SETTING_BATTERY_ALERT] as String)
-						 .replace('DefaultValue', TransmitterStatus.TRANSMITTER_BATTERY_LOW);
+						 .replace('DefaultValue', "300");//default value for G5 is 300 - if user picks other transmitter type, (s)he will need to change the default value
 					 setCommonSetting(COMMON_SETTING_BATTERY_ALERT, newString);
 				 }
 			 }
@@ -274,6 +319,12 @@
 					 noAlert = ModelLocator.resourceManagerInstance.getString("settingsview","no_alert")
 					 newString = (commonSettings[COMMON_SETTING_LOW_ALERT] as String)
 						 .replace('DefaultNoAlertToBeReplaced', noAlert);
+					 setCommonSetting(COMMON_SETTING_LOW_ALERT, newString);
+				 }
+				 if ((commonSettings[COMMON_SETTING_LOW_ALERT] as String).indexOf('DefaultxDripAlertToBeReplaced') > -1) {
+					 noAlert = ModelLocator.resourceManagerInstance.getString("settingsview","xdrip_sound_alert").split(",")[0];
+					 newString = (commonSettings[COMMON_SETTING_LOW_ALERT] as String)
+						 .replace('DefaultxDripAlertToBeReplaced', noAlert);
 					 setCommonSetting(COMMON_SETTING_LOW_ALERT, newString);
 				 }
 			 }
@@ -298,6 +349,12 @@
 					 noAlert = ModelLocator.resourceManagerInstance.getString("settingsview","no_alert")
 					 newString = (commonSettings[COMMON_SETTING_HIGH_ALERT] as String)
 						 .replace('DefaultNoAlertToBeReplaced', noAlert);
+					 setCommonSetting(COMMON_SETTING_HIGH_ALERT, newString);
+				 }
+				 if ((commonSettings[COMMON_SETTING_HIGH_ALERT] as String).indexOf('DefaultxDripAlertToBeReplaced') > -1) {
+					 noAlert = ModelLocator.resourceManagerInstance.getString("settingsview","xdrip_sound_alert").split(",")[0];
+					 newString = (commonSettings[COMMON_SETTING_HIGH_ALERT] as String)
+						 .replace('DefaultxDripAlertToBeReplaced', noAlert);
 					 setCommonSetting(COMMON_SETTING_HIGH_ALERT, newString);
 				 }
 			 }
@@ -363,10 +420,18 @@
 					 setCommonSetting(COMMON_SETTING_CALIBRATION_REQUEST_ALERT, newString);
 				 }
 			 }
+			 if (commonSettingId == COMMON_SETTING_LANGUAGE) {
+				 if ((commonSettings[COMMON_SETTING_LANGUAGE] as String).indexOf('default') > -1) {
+					 setCommonSetting(COMMON_SETTING_LANGUAGE, ModelLocator.resourceManagerInstance.getString("general","languagecode"));
+				 }
+			 }
 			 return commonSettings[commonSettingId];
 		 }
 		 
-		 public static function setCommonSetting(commonSettingId:int, newValue:String, updateDatabase:Boolean = true):void {
+		 /**
+		  * if  updateDatabase = true and dispatchSettingChangedEvent = true, then SETTING_CHANGED will be dispatched
+		  */
+		 public static function setCommonSetting(commonSettingId:int, newValue:String, updateDatabase:Boolean = true, dispatchSettingChangedEvent:Boolean = true):void {
 			 if (commonSettings[commonSettingId] != newValue) {
 				 if (commonSettingId == COMMON_SETTING_TRANSMITTER_ID) {
 					 newValue = newValue.toUpperCase();
@@ -377,9 +442,11 @@
 				 commonSettings[commonSettingId] = newValue;
 				 if (updateDatabase) {
 					 Database.updateCommonSetting(commonSettingId, newValue);
-					 var settingChangedEvent:SettingsServiceEvent = new SettingsServiceEvent(SettingsServiceEvent.SETTING_CHANGED);
-					 settingChangedEvent.data = commonSettingId;
-					 _instance.dispatchEvent(settingChangedEvent);
+					 if (dispatchSettingChangedEvent) {
+						 var settingChangedEvent:SettingsServiceEvent = new SettingsServiceEvent(SettingsServiceEvent.SETTING_CHANGED);
+						 settingChangedEvent.data = commonSettingId;
+						 _instance.dispatchEvent(settingChangedEvent);
+					 }
 				 }
 			 }
 		 }

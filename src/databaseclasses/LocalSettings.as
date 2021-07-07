@@ -55,37 +55,18 @@ package databaseclasses
 		 * device token for remote push notifications 
 		 */
 		public static const LOCAL_SETTING_DEVICE_TOKEN_ID:int = 4;
-		/**
-		 * udid
-		 */
-		public static const LOCAL_SETTING_UDID:int = 5;
-		/**
-		 * subscribed to push notifications, true or false
-		 */
-		public static const LOCAL_SETTING_SUBSCRIBED_TO_PUSH_NOTIFICATIONS:int = 6;
+
+		public static const LOCAL_SETTING_UDID_NOT_USED_ANYMORE:int = 5;
+
+		public static const LOCAL_SETTING_SUBSCRIBED_TO_PUSH_NOTIFICATIONS_NOT_USED_ANYMORE:int = 6;
 		/**
 		 * use nslog, true or false
 		 */
 		public static const LOCAL_SETTING_NSLOG:int = 7;
-		/**
-		 * Tag list to which device should be subcribed (not necessarily is, that's the next setting)<br
-		 * <br>
-		 * Related to subscribing for push notifications at quickblox.<br>
-		 * The app will receive remote notifications that will trigger background fetch<br>
-		 * This needs to be synchronized with the timing that the transmitter generates readings<br>
-		 * Quickblox will send a remote notifications every minute, with a tag ONE, TWO, THREE, FOUR or FIVE<BR>
-		 * ONE will be sent at 00:00 (or a few seconds later). If the timing of the bg readings is between  55:00 and 59:59 then the app needs to subscribe to ONE,
-		 * if later then TWO, THREE, ...<br>
-		 * Default value ONE means device will receive first notification, every 5 minutes<br>
-		 * Multiple values are possible example "ONE,TWO"
-		 */
-		public static const LOCAL_SETTING_WISHED_QBLOX_SUBSCRIPTION_TAG:int = 8;
-		/**
-		 * Tag list to which device is subcribed<br
-		 * <br>
-		 * For explanation see LOCAL_SETTING_SUBSCRIBED_TO_PUSH_NOTIFICATIONS
-		 */
-		public static const LOCAL_SETTING_ACTUAL_QBLOX_SUBSCRIPTION_TAG:int = 9;
+
+		public static const LOCAL_SETTING_WISHED_QBLOX_SUBSCRIPTION_TAG_NOT_USED_ANYMORE:int = 8;
+
+		public static const LOCAL_SETTING_ACTUAL_QBLOX_SUBSCRIPTION_TAG_NOT_USED_ANYMORE:int = 9;
 		/**
 		 * taken over from Android version xdripplus 
 		 */
@@ -98,7 +79,7 @@ package databaseclasses
 		/**
 		 * if user starts editing missed reading alerts, a warning will be shown that this only works guaranteed if Internet is on 
 		 */
-		public static const LOCAL_SETTING_MISSED_READING_WARNING_GIVEN:int = 13;
+		public static const LOCAL_SETTING_MISSED_READING_WARNING_GIVEN_NOT_USED_ANYMORE:int = 13;
 		public static const LOCAL_SETTING_PHONE_MUTED_WARNING_GIVEN:int = 14;
 		public static const LOCAL_SETTING_TRACE_FILE_PATH_NAME:int = 15;
 		public static const LOCAL_SETTING_FROM_TIME_AND_VALUE_ELEMENT_VIEW_VALUE_INFO_GIVEN:int = 16;
@@ -115,35 +96,69 @@ package databaseclasses
 		public static const LOCAL_SETTING_SELECTION_UNIT_DONE:int = 24;
 		public static const LOCAL_SETTING_TIMESTAMP_SINCE_LAST_INFO_UKNOWN_PACKET_TYPE:int = 25;
 		public static const LOCAL_SETTING_DONTASKAGAIN_ABOUT_UNKNOWN_PACKET_TYPE:int = 26;
+		public static const LOCAL_SETTING_SPEECH_INSTRUCTIONS_ACCEPTED:int = 27;
+		public static const LOCAL_SETTING_OVERRIDE_MUTE:int = 28;
+		public static const LOCAL_SETTING_UPDATE_SERVICE_INITIALCHECK:int = 29;
+		public static const LOCAL_SETTING_TIMESTAMP_SINCE_LAST_EXPORT_SIDIARY:int = 30;
+		public static const LOCAL_SETTING_APP_INACTIVE_ALERT:int = 31;
+		public static const LOCAL_SETTING_AMOUNT_OF_WARNINGS_ABOUT_OTHER_APP:int = 32;
+		public static const LOCAL_SETTING_TRANSMITER_PL_AMOUNT_OF_INVALID_SENSOR_AGE_VALUES:int = 33;
+		/**
+		 * If user has other app running that connects to the same G5 transmitter, this will not work<br>
+		 * The app is trying to detect this situation, to avoid complaints<br>
+		 * However the detection mechanism sometimes thinks there's another app trying to connect althought this is not the case<br>
+		 * Therefore the amount of notifications will be reduced, this setting counts the number
+		 */
+		public static const LOCAL_SETTING_AMOUNT_OF_WARNINGS_OTHER_APP:int = 34;
+		public static const LOCAL_SETTING_DEEP_SLEEP_SERVICE_INTERVAL_UNPLUGGED_IN_SECONDS:int = 35;
+		public static const LOCAL_SETTING_NIGHTSCOUTUPLOAD_ON_ALWAYS:int = 36;
+		public static const LOCAL_SETTING_NIGHTSCOUTUPLOAD_ON_WHEN_PLUGGED:int = 37;
+		public static const LOCAL_SETTING_NIGHTSCOUTUPLOAD_ON_EVERY_12_HOURS:int = 38;
+		public static const LOCAL_SETTING_NIGHTSCOUTUPLOAD_ON_WHEN_IN_FOREGROUND:int = 39;
+		public static const LOCAL_SETTING_NIGHTSCOUTUPLOAD_ON_WHEN_COMING_TO_FOREGROUND:int = 40;
 		
 		private static var localSettings:Array = [
 			"false",//LOCAL_SETTING_DETAILED_TRACING_ENABLED
 			"",//LOCAL_SETTING_TRACE_FILE_NAME
 			"false",//LOCAL_SETTING_WARNING_THAT_NIGHTSCOUT_URL_AND_SECRET_IS_NOT_OK_ALREADY_GIVEN
 			"true",//LOCAL_SETTING_ALWAYS_ON_NOTIFICATION
-			"",//LOCAL_SETTING_DEVICE_TOKEN_ID
-			"",//LOCAL_SETTING_UDID
+			"",//LOCAL_SETTING_DEVICE_TOKEN_ID_NOT_USED_ANYMORE
+			"",//LOCAL_SETTING_UDID_NOT_USED_ANYMORE
 			"false",//LOCAL_SETTING_SUBSCRIBED_TO_PUSH_NOTIFICATIONS
-			"ONE",//LOCAL_SETTING_WISHED_QBLOX_SUBSCRIPTION_TAG
-			"ONE",//LOCAL_SETTING_ACTUAL_QBLOX_SUBSCRIPTION_TAG
+			"",//LOCAL_SETTING_WISHED_QBLOX_SUBSCRIPTION_TAG_NOT_USED_ANYMORE
+			"",//LOCAL_SETTING_ACTUAL_QBLOX_SUBSCRIPTION_TAG_NOT_USED_ANYMORE
 			"false",//LOCAL_SETTING_NSLOG
 			"false",//LOCAL_SETTING_G5_ALWAYS_AUTHENTICATE
 			"false",//LOCAL_SETTING_G5_ALWAYS_UNBOUND
 			"false",//LOCAL_SETTING_FromtimeAndValueListView_INFO_SHOWN
-			"false",//LOCAL_SETTING_MISSED_READING_WARNING_GIVEN
+			"false",//LOCAL_SETTING_MISSED_READING_WARNING_GIVEN_NOT_USED_ANYMORE
 			"false",//LOCAL_SETTING_PHONE_MUTED_WARNING_GIVEN
 			"",//LOCAL_SETTING_TRACE_FILE_PATH_NAME
 			"false",//LOCAL_SETTING_FROM_TIME_AND_VALUE_ELEMENT_VIEW_VALUE_INFO_GIVEN
 			"false",//LOCAL_SETTING_LOW_BATTERY_WARNING_GIVEN
 			"false",//LOCAL_SETTING_CALIBRATION_REQUEST_ALERT_WARNING_GIVEN
-			"1.1.2",//LOCAL_SETTING_APPLICATION_VERSION
+			"0.0.0",//LOCAL_SETTING_APPLICATION_VERSION 0.0.0 will be overwritten during initial app launch in HomeView
 			"false",//LOCAL_SETTING_CHART_RANGE_INFO_GIVEN
 			"false",//LOCAL_SETTING_INFO_ABOUT_LONG_PRESS_IN_HOME_SCREEN_GIVEN
 			"false",//LOCAL_SETTING_HEALTHKIT_STORE_ON
 			"false",//LOCAL_SETTING_LICENSE_INFO_ACCEPTED
 			"false",//LOCAL_SETTING_SELECTION_UNIT_DONE
 			"0",//LOCAL_SETTING_TIMESTAMP_SINCE_LAST_INFO_UKNOWN_PACKET_TYPE
-			"false"//LOCAL_SETTING_DONTASKAGAIN_ABOUT_UNKNOWN_PACKET_TYPE
+			"false",//LOCAL_SETTING_DONTASKAGAIN_ABOUT_UNKNOWN_PACKET_TYPE
+			"false",//LOCAL_SETTING_SPEECH_INSTRUCTIONS_ACCEPTED
+			"false",//LOCAL_SETTING_OVERRIDE_MUTE
+			"true",//LOCAL_SETTING_UPDATE_SERVICE_INITIALCHECK
+			"0",//LOCAL_SETTING_TIMESTAMP_SINCE_LAST_EXPORT_SIDIARY
+			"true",//LOCAL_SETTING_APP_INACTIVE_ALERT
+			"0",//LOCAL_SETTING_AMOUNT_OF_WARNINGS_ABOUT_OTHER_APP
+			"0",//LOCAL_SETTING_TRANSMITER_PL_AMOUNT_OF_INVALID_SENSOR_AGE_VALUES
+			"0",//LOCAL_SETTING_AMOUNT_OF_WARNINGS_OTHER_APP
+			"5",//LOCAL_SETTING_DEEP_SLEEP_SERVICE_INTERVAL_UNPLUGGED_IN_SECONDS
+			"true",//LOCAL_SETTING_NIGHTSCOUTUPLOAD_ON_ALWAYS
+			"true",//LOCAL_SETTING_NIGHTSCOUTUPLOAD_ON_WHEN_PLUGGED
+			"true",//LOCAL_SETTING_NIGHTSCOUTUPLOAD_ON_EVERY_12_HOURS
+			"true",//LOCAL_SETTING_NIGHTSCOUTUPLOAD_ON_WHEN_IN_FOREGROUND
+			"true" //LOCAL_SETTING_NIGHTSCOUTUPLOAD_ON_WHEN_COMING_TO_FOREGROUND
 		];
 		
 		public function LocalSettings() {
@@ -156,14 +171,19 @@ package databaseclasses
 			return localSettings[localSettingId];
 		}
 
-		public static function setLocalSetting(localSettingId:int, newValue:String, updateDatabase:Boolean = true):void {
+		/**
+		 * if  updateDatabase = true and dispatchSettingChangedEvent = true, then SETTING_CHANGED will be dispatched
+		 */
+		public static function setLocalSetting(localSettingId:int, newValue:String, updateDatabase:Boolean = true, dispatchSettingChangedEvent:Boolean = true):void {
 			if (localSettings[localSettingId] != newValue) {
 				localSettings[localSettingId] = newValue;
 				if (updateDatabase) {
 					Database.updateLocalSetting(localSettingId, newValue);
-					var settingChangedEvent:SettingsServiceEvent = new SettingsServiceEvent(SettingsServiceEvent.SETTING_CHANGED);
-					settingChangedEvent.data = localSettingId;
-					_instance.dispatchEvent(settingChangedEvent);
+					if (dispatchSettingChangedEvent) {
+						var settingChangedEvent:SettingsServiceEvent = new SettingsServiceEvent(SettingsServiceEvent.SETTING_CHANGED);
+						settingChangedEvent.data = localSettingId;
+						_instance.dispatchEvent(settingChangedEvent);
+					}
 				}
 			}
 		}

@@ -25,10 +25,13 @@ package services
 	import com.distriqt.extension.notifications.Notifications;
 	import com.distriqt.extension.notifications.builders.NotificationBuilder;
 	import com.distriqt.extension.notifications.events.NotificationEvent;
+	import com.freshplanet.ane.AirBackgroundFetch.BackgroundFetch;
 	
 	import flash.events.EventDispatcher;
 	import flash.utils.ByteArray;
 	import flash.utils.Endian;
+	
+	import mx.collections.ArrayCollection;
 	
 	import Utilities.Trace;
 	
@@ -41,10 +44,12 @@ package services
 	import events.TransmitterServiceEvent;
 	
 	import model.ModelLocator;
+	import model.Tomato;
 	import model.TransmitterDataBluKonPacket;
 	import model.TransmitterDataBlueReaderBatteryPacket;
 	import model.TransmitterDataBlueReaderPacket;
 	import model.TransmitterDataG5Packet;
+	import model.TransmitterDataTransmiter_PLPacket;
 	import model.TransmitterDataXBridgeBeaconPacket;
 	import model.TransmitterDataXBridgeDataPacket;
 	import model.TransmitterDataXdripDataPacket;
@@ -72,6 +77,8 @@ package services
 		 */
 		private static var lastPacketTime:Number = 0;
 		
+		private static var timeStampSinceLastG5BadlyPlacedBatteriesInfo:Number = 0;
+		
 		public function TransmitterService()
 		{
 			if (_instance != null) {
@@ -87,6 +94,12 @@ package services
 			
 			BluetoothService.instance.addEventListener(BlueToothServiceEvent.TRANSMITTER_DATA, transmitterDataReceived);
 			NotificationService.instance.addEventListener(NotificationServiceEvent.NOTIFICATION_EVENT, notificationReceived);
+			NotificationService.instance.addEventListener(NotificationServiceEvent.NOTIFICATION_SELECTED_EVENT, notificationReceived);
+
+		}
+		
+		public static function dispatchBgReadingEvent():void {
+			_instance.dispatchEvent(new TransmitterServiceEvent(TransmitterServiceEvent.BGREADING_EVENT));
 		}
 		
 		private static function transmitterDataReceived(be:BlueToothServiceEvent):void {
@@ -94,6 +107,7 @@ package services
 				return;//should never be null actually
 			else {
 				if (be.data is TransmitterDataXBridgeBeaconPacket) {
+					myTrace("in transmitterDataReceived, received TransmitterDataXBridgeBeaconPacket");
 					if (((new Date()).valueOf() - lastPacketTime) < 60000) {
 						myTrace("in transmitterDataReceived , is TransmitterDataXBridgeBeaconPacket but lastPacketTime < 60 seconds ago, ignoring");
 					} else {
@@ -102,7 +116,7 @@ package services
 						if (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_TRANSMITTER_ID) == "00000" 
 							&&
 							transmitterDataBeaconPacket.TxID == "00000") {
-							
+							myTrace("in transmitterDataReceived, no transmitter id stored in xbridge and no transmitter id set in app, requesting transmitter id to user");
 							Notifications.service.cancel(NotificationService.ID_FOR_ENTER_TRANSMITTER_ID);
 							Notifications.service.notify(
 								new NotificationBuilder()
@@ -116,11 +130,7 @@ package services
 						} else if (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_TRANSMITTER_ID) == "00000" 
 							&&
 							transmitterDataBeaconPacket.TxID != "00000") {
-							myTrace("storing transmitter id received from bluetooth device = " + transmitterDataBeaconPacket.TxID);
-							var transmitterServiceEvent:TransmitterServiceEvent = new TransmitterServiceEvent(TransmitterServiceEvent.TRANSMITTER_SERVICE_INFORMATION_EVENT);
-							transmitterServiceEvent.data = new Object();
-							transmitterServiceEvent.data.information = "storing transmitter id received from bluetooth device = " + transmitterDataBeaconPacket.TxID;
-							_instance.dispatchEvent(transmitterServiceEvent);
+							myTrace("storing transmitter id received from xbridge = " + transmitterDataBeaconPacket.TxID);
 							CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_TRANSMITTER_ID, transmitterDataBeaconPacket.TxID.toUpperCase());
 							var value:ByteArray = new ByteArray();
 							value.writeByte(0x02);
@@ -153,10 +163,6 @@ package services
 							&&
 							transmitterDataXBridgeDataPacket.TxID != "00000") {
 							myTrace("storing transmitter id received from bluetooth device = " + transmitterDataXBridgeDataPacket.TxID);
-							var transmitterServiceEvent:TransmitterServiceEvent = new TransmitterServiceEvent(TransmitterServiceEvent.TRANSMITTER_SERVICE_INFORMATION_EVENT);
-							transmitterServiceEvent.data = new Object();
-							transmitterServiceEvent.data.information = "storing transmitter id received from bluetooth device = " + transmitterDataXBridgeDataPacket.TxID;
-							_instance.dispatchEvent(transmitterServiceEvent);
 							CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_TRANSMITTER_ID, transmitterDataXBridgeDataPacket.TxID.toUpperCase());
 							var value:ByteArray = new ByteArray();
 							value.writeByte(0x02);
@@ -229,9 +235,61 @@ package services
 					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_G4_TRANSMITTER_BATTERY_VOLTAGE, transmitterDataG5Packet.transmitterBatteryVoltage.toString());
 					if (Sensor.getActiveSensor() != null)
 						Sensor.getActiveSensor().latestBatteryLevel = transmitterDataG5Packet.transmitterBatteryVoltage;
-					//create and save bgreading
+					
+					//check special values filtered and unfiltered to detect dead battery
+					if (transmitterDataG5Packet.filteredData == 2096896) {
+						myTrace("in transmitterDataReceived, filteredData = 2096896, this indicates a dead G5 battery, no further processing");
+						if (BackgroundFetch.appIsInForeground()) {
+							DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString("transmitterservice","dead_g5_battery"),
+								ModelLocator.resourceManagerInstance.getString("transmitterservice","dead_g5_battery_info"));
+							BackgroundFetch.vibrate();
+						} else {
+							var notificationBuilderG5BatteryInfo:NotificationBuilder = new NotificationBuilder()
+								.setId(NotificationService.ID_FOR_DEAD_G5_BATTERY_INFO)
+								.setAlert(ModelLocator.resourceManagerInstance.getString("transmitterservice","dead_g5_battery"))
+								.setTitle(ModelLocator.resourceManagerInstance.getString("transmitterservice","dead_g5_battery"))
+								.setBody(ModelLocator.resourceManagerInstance.getString("transmitterservice","dead_g5_battery_info"))
+								.enableVibration(true)
+							Notifications.service.notify(notificationBuilderG5BatteryInfo.build());
+						}
+					} else if ((transmitterDataG5Packet.rawData == 0 || transmitterDataG5Packet.filteredData == 0) && transmitterDataG5Packet.timeStamp != 0) {
+						myTrace("in transmitterDataReceived, rawdata = 0, this may be caused by refurbished G5 with badly placed batteries, or badly placed transmitter");
+						if ((new Date()).valueOf() - timeStampSinceLastG5BadlyPlacedBatteriesInfo > 1 * 3600 * 1000 && Sensor.getActiveSensor() != null) {
+							timeStampSinceLastG5BadlyPlacedBatteriesInfo = (new Date()).valueOf();
+							if (BackgroundFetch.appIsInForeground()) {
+								DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString("transmitterservice","bad_placed_g5_transmitter"),
+									ModelLocator.resourceManagerInstance.getString("transmitterservice","bad_placed_g5_transmitter_info"));
+								BackgroundFetch.vibrate();
+							} else {
+								var notificationBuilderG5BatteryInfo:NotificationBuilder = new NotificationBuilder()
+									.setId(NotificationService.ID_FOR_BAD_PLACED_G5_INFO)
+									.setAlert(ModelLocator.resourceManagerInstance.getString("transmitterservice","bad_placed_g5_transmitter"))
+									.setTitle(ModelLocator.resourceManagerInstance.getString("transmitterservice","bad_placed_g5_transmitter"))
+									.setBody(ModelLocator.resourceManagerInstance.getString("transmitterservice","bad_placed_g5_transmitter_info"))
+									.enableVibration(true)
+								Notifications.service.notify(notificationBuilderG5BatteryInfo.build());
+							}
+						} 
+					} else {
+						//create and save bgreading
+						BgReading.
+							create(transmitterDataG5Packet.rawData, transmitterDataG5Packet.filteredData)
+							.saveToDatabaseSynchronous();
+						
+						//dispatch the event that there's new data
+						transmitterServiceEvent = new TransmitterServiceEvent(TransmitterServiceEvent.BGREADING_EVENT);
+						_instance.dispatchEvent(transmitterServiceEvent);
+					}
+				} else if (be.data is TransmitterDataTransmiter_PLPacket) {
+					var transmitterDataTransmiter_PLPacket:TransmitterDataTransmiter_PLPacket = be.data as TransmitterDataTransmiter_PLPacket;
+					if (!isNaN(transmitterDataTransmiter_PLPacket.bridgeBatteryLevel)) {
+						CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_BLUEREADER_BATTERY_LEVEL, transmitterDataTransmiter_PLPacket.bridgeBatteryLevel.toString());
+					}
+					if (!isNaN(transmitterDataTransmiter_PLPacket.sensorAge)) {
+						CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_FSL_SENSOR_AGE, transmitterDataTransmiter_PLPacket.sensorAge.toString());
+					}
 					BgReading.
-						create(transmitterDataG5Packet.rawData, transmitterDataG5Packet.filteredData)
+						create(transmitterDataTransmiter_PLPacket.bgValue, transmitterDataTransmiter_PLPacket.bgValue)
 						.saveToDatabaseSynchronous();
 					
 					//dispatch the event that there's new data
@@ -284,7 +342,7 @@ package services
 						CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_FSL_SENSOR_AGE, transmitterDataBluKonPacket.sensorAge.toString());
 					}
 					BgReading.
-						create(transmitterDataBluKonPacket.bgvalue, transmitterDataBluKonPacket.bgvalue)
+						create(transmitterDataBluKonPacket.bgvalue, transmitterDataBluKonPacket.bgvalue, transmitterDataBluKonPacket.timeStamp)
 						.saveToDatabaseSynchronous();
 					
 					//dispatch the event that there's new data
@@ -309,7 +367,13 @@ package services
 					);
 					alert.addEventListener(DialogViewEvent.CLOSED, transmitterIdEntered);
 					DialogService.addDialog(alert, 58);
-				}
+				} else if (notificationEvent.id == NotificationService.ID_FOR_DEAD_G5_BATTERY_INFO) {
+					DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString("transmitterservice","dead_g5_battery"),
+						ModelLocator.resourceManagerInstance.getString("transmitterservice","dead_g5_battery_info"));
+				} else if (notificationEvent.id == NotificationService.ID_FOR_BAD_PLACED_G5_INFO) {
+					DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString("transmitterservice","bad_placed_g5_transmitter"),
+						ModelLocator.resourceManagerInstance.getString("transmitterservice","bad_placed_g5_transmitter_info"));
+				} 
 			}		
 		}
 		

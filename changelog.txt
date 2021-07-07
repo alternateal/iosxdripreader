@@ -1,0 +1,15 @@
+1.4.6
+
+- Improve mute check : Mute check done right before raising an alert, to make sure mute statis is correct. Closes #46
+- reduce maximum number of warnings about other app trying to connect to G5 transmitter.
+- fix in notification id for Transmitter PL, case where dead or expired sensor is detected
+- fix for double pop up, closes #45
+- fix for follower mode, added sgv. in nightscout url, as done in Spike https://github.com/SpikeApp/Spike/commit/0d95245af242e184cf5651408afae48ad60f67b6
+
+1.4.5.
+
+- trace improvement for xbridge, correct logging of subscribed characteristic
+- transmitterservice , added tracing, removed also TransmitterServiceEvent.TRANSMITTER_SERVICE_INFORMATION_EVENT, that's not used anymore
+- If alarm notification, and if user opens app within 30 seconds, not via notification but by clicking app icon, then snoozedialog will pop up
+- If user changes an alert setting, then it will be checked if the alert is still valid at that moment or not, and if not any applicable repeats will be disabled.
+This is only for changing alerts, not alert types.

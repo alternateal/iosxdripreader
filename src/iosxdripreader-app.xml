@@ -8,7 +8,7 @@
 	See the GNU General Public License for more details. You should have received 
 	a copy of the GNU General Public License along with this program. If not, 
 	see <http://www.gnu.org/licenses/gpl.txt>. -->
-<application xmlns="http://ns.adobe.com/air/application/25.0">
+<application xmlns="http://ns.adobe.com/air/application/27.0">
 
 	<!-- Adobe AIR Application Descriptor File Template. Specifies parameters 
 		for identifying, installing, and launching AIR applications. xmlns - The 
@@ -35,7 +35,7 @@
 		An updated version of application must have a versionNumber value higher 
 		than the previous version. Required for namespace >= 2.5 . For iOS Apps, 
 		this represents build number. -->
-	<versionNumber>1.1.2</versionNumber>
+	<versionNumber>1.5.13</versionNumber>
 	<!-- A string value (such as "v1", "2.5", or "Alpha 1") that represents 
 		the version of the application, as it should be shown to users. For iOS Apps, 
 		this represents application version number and format should be (<0-999>.<0-999>.<0-999>). 
@@ -134,7 +134,7 @@
 
 		<!-- Display Resolution for the app (either "standard" or "high"). Optional, 
 			OSX-only. Default "standard" -->
-		<!-- <requestedDisplayResolution></requestedDisplayResolution> -->
+		<requestedDisplayResolution>high</requestedDisplayResolution>
 		<aspectRatio>portrait</aspectRatio>
 		<autoOrients>true</autoOrients>
 		<fullScreen>false</fullScreen>
@@ -226,22 +226,21 @@
 	<iPhone>
 		<!-- A list of plist key/value pairs to be added to the application Info.plist -->
 		<InfoAdditions>
+			<![CDATA[<key>UIViewControllerBasedStatusBarAppearance</key><false/>]]>
+    		<![CDATA[<key>UIStatusBarStyle</key><string>UIStatusBarStyleLightContent</string>]]>
             <![CDATA[
                 <key>UIDeviceFamily</key>
                 <array>
                     <string>1</string>
                     <string>2</string>
                 </array>
-                <key>UIStatusBarStyle</key>
-                <string>UIStatusBarStyleBlackOpaque</string>
                 <key>MinimumOSVersion</key>
-                <string>8.1.4</string>
+                <string>8.1</string>
                 <key>UIBackgroundModes</key>
 				<array>
 					<string>bluetooth-central</string>
-					<string>fetch</string>
-					<string>remote-notification</string>
 					<string>audio</string>
+					<string>remote-notification</string>
 				</array>
 				<key>NSAppTransportSecurity</key>
       				<dict>
@@ -249,21 +248,25 @@
       				</dict>
       			<key>NSHealthUpdateUsageDescription</key>
 				<string>Store readings</string>
+      			<key>NSHealthShareUsageDescription</key>
+				<string>Store readings</string>
+				<key>NSBluetoothPeripheralUsageDescription</key>
+				<string>Connect to CGM Transmitter</string>
       				
       			<key>UIRequiredDeviceCapabilities</key>
       				<array>
       					<string>healthkit</string>
 					</array>
+				<key>ITSAppUsesNonExemptEncryption</key><false/>
+					
             ]]>
 		</InfoAdditions>
 		<!-- A list of plist key/value pairs to be added to the application Entitlements.plist -->
+		<!-- change aps-environment to production for release to app store -->
+		<!--   ADD BETA-REPORTS-ACTIVE IN ENTITLEMENTS TO RELEASE FOR TESTFLIGHT -->
+		<!--  key>beta-reports-active</key-->
+   		<!--  true/-->
 		<Entitlements> <![CDATA[
-		<!-- DEVELOPMENT -->
-		<key>get-task-allow</key>
-		<true/>
-		<key>aps-environment</key>
-		<string>development</string>
-		
 		<key>application-identifier</key>
 		<string>8DKSZ5HNLB.net.johandegraeve.iosxdripreader</string>
 		<key>com.apple.developer.healthkit</key>
@@ -272,7 +275,10 @@
 		<array>
 		<string>8DKSZ5HNLB.*</string>
 		</array>
-		
+		<!--  key>beta-reports-active</key-->
+   		<!--  true/-->
+		<key>aps-environment</key>
+		<string>development</string>	
 		
 			 ]]></Entitlements>
 		<!-- Display Resolution for the app (either "standard" or "high"). Optional. 
@@ -349,13 +355,11 @@
 		<extensionID>com.distriqt.Core</extensionID>
 		<extensionID>com.distriqt.Dialog</extensionID>
 		<extensionID>com.distriqt.AndroidSupport</extensionID>
-		<extensionID>com.distriqt.Application</extensionID>
 		<extensionID>com.distriqt.Message</extensionID>
-
 		<extensionID>com.distriqt.NetworkInfo</extensionID>
-
 		<extensionID>net.johandegraeve.iosfetchinterval</extensionID>
-		
-	<extensionID>com.freshplanet.AirBackgroundFetch</extensionID>
+		<extensionID>com.freshplanet.AirBackgroundFetch</extensionID>
+    <extensionID>com.distriqt.androidsupport.V4</extensionID>
+    <extensionID>com.distriqt.PushNotifications</extensionID>
     </extensions>
 </application>

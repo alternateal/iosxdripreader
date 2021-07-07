@@ -43,6 +43,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 			import com.distriqt.extension.dialog.events.DialogViewEvent;
 			import com.distriqt.extension.dialog.objects.DialogAction;
 			import com.freshplanet.ane.AirBackgroundFetch.BackgroundFetch;
+			import com.freshplanet.ane.AirBackgroundFetch.BackgroundFetchEvent;
 			
 			import mx.charts.chartClasses.IAxis;
 			import mx.collections.ArrayCollection;
@@ -55,7 +56,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 			import G5Model.TransmitterStatus;
 			
 			import Utilities.BgGraphBuilder;
-			import Utilities.FromtimeAndValueArrayCollection;
 			import Utilities.Trace;
 			
 			import databaseclasses.BgReading;
@@ -70,15 +70,18 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 			import events.CalibrationServiceEvent;
 			import events.DatabaseEvent;
 			import events.DialogServiceEvent;
+			import events.NightScoutServiceEvent;
 			import events.NotificationServiceEvent;
 			import events.SettingsServiceEvent;
 			import events.TransmitterServiceEvent;
 			
 			import model.ModelLocator;
 			
+			import services.AlarmService;
 			import services.BluetoothService;
 			import services.CalibrationService;
 			import services.DialogService;
+			import services.NightScoutService;
 			import services.NotificationService;
 			import services.TransmitterService;
 			
@@ -102,7 +105,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 			[Bindable]
 			private static var deltaValueText:String = "---";
 			[Bindable]
+			private static var batteryLevelText:String = "---";
+			[Bindable]
 			private static var _calibrateButtonActive:Boolean = false;
+			[Bindable]
+			private static var _bluetoothButtonActive:Boolean = false;
 			private static const ACTION_SHEET_INDEX_FOR_SCAN_FOR_DEVICE:int = 0;
 			private static const ACTION_SHEET_INDEX_FOR_FORGET_DEVICE:int = 1;
 			private static const ACTION_SHEET_INDEX_FOR_START_SENSOR:int = 2;
@@ -188,6 +195,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 			private static var largeBgLabelTouchTimer:Timer;
 			
 			private static var dateFormatterForSensorStartTimeAndDate:DateTimeFormatter;
+			private static var chartInitialisationDone:Boolean = false;
 			
 			protected function onCreationComplete(event:FlexEvent):void
 			{
@@ -201,22 +209,27 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 					Database.instance.addEventListener(DatabaseEvent.BGREADING_RETRIEVAL_EVENT, bgReadingReceivedFromDatabase);
 					Database.init();
 					initialStart = false;
-					CommonSettings.instance.addEventListener(SettingsServiceEvent.SETTING_CHANGED, settingChanged);
-					
+					CommonSettings.instance.addEventListener(SettingsServiceEvent.SETTING_CHANGED, commonSettingChanged);
+					NightScoutService.instance.addEventListener(NightScoutServiceEvent.NIGHTSCOUT_SERVICE_BG_READING_RECEIVED, bgReadingReceived);
+					NightScoutService.instance.addEventListener(NightScoutServiceEvent.NIGHTSCOUT_SERVICE_BG_READINGS_REMOVED, NSReadingsRemoved);
 
 					dateFormatterForSensorStartTimeAndDate = new DateTimeFormatter();
 					dateFormatterForSensorStartTimeAndDate.dateTimePattern = ModelLocator.resourceManagerInstance.getString('homeview','datetimepatternforstatusinfo');
 					dateFormatterForSensorStartTimeAndDate.useUTC = false;
 					dateFormatterForSensorStartTimeAndDate.setStyle("locale",Capabilities.language.substr(0,2));
+					
 				} else {
 					//set info
 					displayCurrentInfoFromReading();
+					
+					//transmittertype may have changed while this screen was not open, value needs to be set again
+					enableOrDisableBatteryLevelText();
 					
 					//start timer to check for delay since last receipt of bgreading
 					restartCurrentInfoUpdateTimer();
 				}
 				
-				function settingChanged(event:SettingsServiceEvent):void {
+				function commonSettingChanged(event:SettingsServiceEvent):void {
 					if (event.data == CommonSettings.COMMON_SETTING_DO_MGDL 
 						|| 
 						event.data == CommonSettings.COMMON_SETTING_HIGH_MARK 
@@ -224,18 +237,36 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 						event.data == CommonSettings.COMMON_SETTING_LOW_MARK) {
 						displayCurrentInfoFromReading();
 					} else if (event.data == CommonSettings.COMMON_SETTING_PERIPHERAL_TYPE) {
-						if (BlueToothDevice.needsTransmitterId()) {
-							SettingsView.requestNewTransmitterId();
-						}
-						if (BlueToothDevice.alwaysScan()) {
-							scanningWasUserInitiated = false;
-							if (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_G5_INFO_SCREEN_SHOWN) == "false") {
-								showG5InfoScreen();
+						if (!BlueToothDevice.isFollower()) {
+							if (BlueToothDevice.alwaysScan()) {
+								scanningWasUserInitiated = false;
+								if (BlueToothDevice.isDexcomG5()) {
+									if (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_G5_INFO_SCREEN_SHOWN) == "false") {
+										showG5InfoScreen();
+									}
+								} else if (BlueToothDevice.isBluKon()) {
+									if (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_BLUKON_INFO_SCREEN_SHOWN) == "false") {
+										showBluKonInfoScreen();
+									}
+								}
+							} else {
+								if (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_G4_INFO_SCREEN_SHOWN) == "false") {
+									showG4InfoScreen();
+								}
 							}
+							_bluetoothButtonActive = true;
+							if (Calibration.allForSensor().length > 1)
+								_calibrateButtonActive = true;
 						} else {
-							if (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_G4_INFO_SCREEN_SHOWN) == "false") {
-								showG4InfoScreen();
-							}
+							_bluetoothButtonActive = false;
+							_calibrateButtonActive = false;
+						}
+						if (BlueToothDevice.isTransmiter_PL()) {
+							batteryLevelId.includeInLayout = true;
+							batteryLevelId.visible = true;
+						} else {
+							batteryLevelId.includeInLayout = false;
+							batteryLevelId.visible = false;
 						}
 					}
 					
@@ -261,26 +292,47 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 				
 				function onInitResult(event:Event):void
 				{
-					trace("HomeView : database init result ok");
+					myTrace("HomeView : database init result ok");
 					//at this moment the database is intialised, but the logs, bgreadings, ... might still be read in the ModelLocator, Modellocator is listening to the same event
 					
 					//set calibration button in the correct state
-					if (Calibration.allForSensor().length > 1) {
+					if (Calibration.allForSensor().length > 1 && !BlueToothDevice.isFollower()) {
 						_calibrateButtonActive = true;
 					}
+					if (!BlueToothDevice.isFollower()) {
+						_bluetoothButtonActive = true;
+					}
+					
+					enableOrDisableBatteryLevelText();
 					
 					BluetoothService.instance.addEventListener(BlueToothServiceEvent.BLUETOOTH_SERVICE_INITIATED, blueToothServiceInitiated);
 					
-					TransmitterService.instance.addEventListener(TransmitterServiceEvent.BGREADING_EVENT, transmitterServiceBGReadingEventReceived);
-					
+					TransmitterService.instance.addEventListener(TransmitterServiceEvent.BGREADING_EVENT, bgReadingReceived);
+					NightScoutService.instance.addEventListener(NightScoutServiceEvent.NIGHTSCOUT_SERVICE_BG_READING_RECEIVED, bgReadingReceived);
+
 					CalibrationService.instance.addEventListener(CalibrationServiceEvent.INITIAL_CALIBRATION_EVENT, initialCalibrationEventReceived);
 					CalibrationService.instance.addEventListener(CalibrationServiceEvent.NEW_CALIBRATION_EVENT, newCalibrationEventReceived);
+					
 				}
 				
 				function onInitError(event:Event):void
 				{	
-					trace("HomeView : database init error");
+					myTrace("HomeView : database init error");
 				}
+			}
+			
+			/**
+			 * makes the batteryleveltext field visible or not, dependent on transmittertype
+			 */
+			private function enableOrDisableBatteryLevelText():void {
+				if (BlueToothDevice.isTransmiter_PL()) {
+					batteryLevelId.includeInLayout = true;
+					batteryLevelId.visible = true;
+				} else {
+					batteryLevelId.includeInLayout = false;
+					batteryLevelId.visible = false;
+				}
+				
 			}
 			
 			private static function showInfoAboutClickOnChart():void {
@@ -299,32 +351,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 				NotificationService.updateBgNotification(null);
 				if (DialogService.isInitiated) {
 					dialogServiceInitiated(null);
-					checkApplicationVersion(null);
 				} else {
 					DialogService.instance.addEventListener(DialogServiceEvent.DIALOG_SERVICE_INITIATED_EVENT, dialogServiceInitiated);
-					DialogService.instance.addEventListener(DialogServiceEvent.DIALOG_SERVICE_INITIATED_EVENT, checkApplicationVersion);
 				}
 			}
 						
-			/*private static function peripheralTypeSelected(event:DialogViewEvent):void {
-				CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_INITIAL_SELECTION_G4_OR_G5_DONE, "true");
-				if (event.index== 1) {
-					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_PERIPHERAL_TYPE, "G5");
-					if (BluetoothLE.service.centralManager.state == BluetoothLEState.STATE_ON) {
-						if (!BluetoothLE.service.centralManager.isScanning) {
-							BluetoothService.startScanning();
-						}
-					}
-					showG5InfoScreen();
-					//default battery alert level is 210, assuming xdrip with G4, when user selects G5, that needs to be changed
-					var newSetting:String = FromtimeAndValueArrayCollection.replaceAllValues(CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_BATTERY_ALERT), new Number(G5Model.TransmitterStatus.LOW_BATTERY_WARNING_LEVEL_VOLTAGEA), false)
-					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_BATTERY_ALERT, newSetting);
-				} else if (event.index == 2) {
-					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_PERIPHERAL_TYPE, "G4");
-					showG4InfoScreen();
-				}
-			}*/
-			
 			private static function showG4InfoScreen():void {
 				if (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_G4_INFO_SCREEN_SHOWN) == "false") {
 					DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString('homeview',"info"),
@@ -342,6 +373,18 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 					DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString('homeview',"info"),
 						message);
 					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_G5_INFO_SCREEN_SHOWN,"true");
+				}
+			}
+			
+			private static function showBluKonInfoScreen():void {
+				if (CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_BLUKON_INFO_SCREEN_SHOWN) == "false") {
+					var message:String = ModelLocator.resourceManagerInstance.getString('homeview',"info_screen_blukon");
+					if (Sensor.getActiveSensor() == null) {
+						message += "\n\n" + ModelLocator.resourceManagerInstance.getString('homeview',"info_screen_2_start_sensor");
+					}
+					DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString('homeview',"info"),
+						message);
+					CommonSettings.setCommonSetting(CommonSettings.COMMON_SETTING_BLUKON_INFO_SCREEN_SHOWN,"true");
 				}
 			}
 			
@@ -412,7 +455,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 				}
 			}
 			
-			private function bluetoothDeviceConnectionCompleted(event:BlueToothServiceEvent):void {
+			private function bluetoothDeviceConnectionCompleted(event:Event):void {
 				myTrace("in bluetoothDeviceConnectionCompleted");
 				if (!peripheralConnected) {
 					myTrace("in bluetoothDeviceConnectionCompleted, setting peripheralConnected = true");
@@ -421,7 +464,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 				}
 			}
 			
-			private function userInitiatedScanningSucceeded(event:PeripheralEvent):void {
+			private function userInitiatedScanningSucceeded(event:Event):void {
 				if (scanningWasUserInitiated) {
 					scanningWasUserInitiated = false;
 					DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString('homeview',"scan_for_device"),
@@ -430,7 +473,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 				}
 			}
 			
-			private function central_peripheralDisconnectHandler(event:PeripheralEvent):void {
+			private function central_peripheralDisconnectHandler(event:Event):void {
 				if (peripheralConnected) {
 					myTrace("in central_peripheralDisconnectHandler, setting peripheralConnected = false");
 					peripheralConnected = false;
@@ -439,17 +482,28 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 			}
 			
 			private function blueToothServiceInitiated(be:BlueToothServiceEvent):void {
+				BackgroundFetch.instance.addEventListener(BackgroundFetchEvent.MIAOMIAO_CONNECTED, bluetoothDeviceConnectionCompleted);
 				BluetoothService.instance.addEventListener(BlueToothServiceEvent.BLUETOOTH_DEVICE_CONNECTION_COMPLETED, bluetoothDeviceConnectionCompleted);
 				BluetoothLE.service.centralManager.addEventListener(PeripheralEvent.DISCONNECT, central_peripheralDisconnectHandler);
-
+				BackgroundFetch.instance.addEventListener(BackgroundFetchEvent.MIAOMIAO_DISCONNECTED, central_peripheralDisconnectHandler);
 				resetChartValues();
 			}
 			
-			private function transmitterServiceBGReadingEventReceived(be:TransmitterServiceEvent):void {
+			private function bgReadingReceived(be:Event):void {
 				displayCurrentInfoFromReading();
-				addToChartValues(BgReading.lastNoSensor());
-				showInfoAboutClickOnChart();
-				completeChartValues();
+				if (BlueToothDevice.isFollower() && !chartInitialisationDone) {
+					resetChartValues();		
+					chartInitialisationDone = true;
+				} else {
+					addToChartValues(BgReading.lastNoSensor());
+					showInfoAboutClickOnChart();
+					completeChartValues();
+				}
+			}
+			
+			private function NSReadingsRemoved(event:Event):void {
+				resetChartValues();
+				chartInitialisationDone = false;//needs to get the right value in case user switches back from non-follower type to follower
 			}
 			
 			private function restartCurrentInfoUpdateTimer():void {
@@ -529,6 +583,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 						currentBgLabelColor = 0xFFFFFF;
 					}
 				}
+				if (BlueToothDevice.isTransmiter_PL()) {
+					batteryLevelText = ModelLocator.resourceManagerInstance.getString('homeview','battery') + " " + CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_BLUEREADER_BATTERY_LEVEL) + " %";
+				}
 			}
 			
 			private function calibrationButtonClicked(e:MouseEvent = null):void {
@@ -551,20 +608,23 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 					actionsheetBuilder.addAction(ModelLocator.resourceManagerInstance.getString('homeview','forget_device'), DialogAction.STYLE_DEFAULT, ACTION_SHEET_INDEX_FOR_FORGET_DEVICE);
 				}
 				
-				if (Sensor.getActiveSensor() == null) {
+				//for miaomiao, sensor will be started automatically based on sensorage, (could also be done for blucon)
+				if (Sensor.getActiveSensor() == null && !BlueToothDevice.isMiaoMiao()) {
 					actionsheetBuilder.addAction(ModelLocator.resourceManagerInstance.getString('homeview','start_sensor'), DialogAction.STYLE_DEFAULT, ACTION_SHEET_INDEX_FOR_START_SENSOR);
 				} else {
-					actionsheetBuilder.addAction(ModelLocator.resourceManagerInstance.getString('homeview','stop_sensor'), DialogAction.STYLE_DEFAULT, ACTION_SHEET_INDEX_FOR_STOP_SENSOR);
+					if (Sensor.getActiveSensor() != null) {
+						actionsheetBuilder.addAction(ModelLocator.resourceManagerInstance.getString('homeview','stop_sensor'), DialogAction.STYLE_DEFAULT, ACTION_SHEET_INDEX_FOR_STOP_SENSOR);
+					}
 				}
 				
 				actionsheetBuilder.addAction(ModelLocator.resourceManagerInstance.getString('general','cancel'),DialogAction.STYLE_CANCEL, ACTION_SHEET_INDEX_FOR_CANCEL);
 				
 				var actionSheet:DialogView = Dialog.service.create(actionsheetBuilder.build());
-				actionSheet.addEventListener(DialogViewEvent.CLOSED, actionSheet_closedHandler);
+				actionSheet.addEventListener(DialogViewEvent.CLOSED, bluetoothActionSheet_closedHandler);
 				actionSheet.show();
 			}
 			
-			private function actionSheet_closedHandler( event:DialogViewEvent ):void {
+			private function bluetoothActionSheet_closedHandler( event:DialogViewEvent ):void {
 				var actionSheet:DialogView = DialogView(event.currentTarget);
 				actionSheet.dispose();
 				
@@ -573,6 +633,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 					if (BluetoothLE.service.centralManager.state == BluetoothLEState.STATE_ON) {
 						BluetoothService.instance.addEventListener(BlueToothServiceEvent.STOPPED_SCANNING, scanningStopped);
 						BluetoothLE.service.centralManager.addEventListener(PeripheralEvent.CONNECT, userInitiatedScanningSucceeded);
+						BackgroundFetch.instance.addEventListener(BackgroundFetchEvent.MIAOMIAO_CONNECTED, userInitiatedScanningSucceeded);
 						scanningWasUserInitiated = true;
 						BluetoothService.startScanning(true);
 						DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString('homeview',"scan_for_device"),
@@ -587,6 +648,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 					}
 				} else if (event.index == ACTION_SHEET_INDEX_FOR_FORGET_DEVICE) {
 					BlueToothDevice.forgetBlueToothDevice();
+					BluetoothService.stopScanning(null);
 				} else if (event.index == ACTION_SHEET_INDEX_FOR_START_SENSOR) {
 					var alert:DialogView = Dialog.service.create(
 						new AlertBuilder()
@@ -628,7 +690,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 					}
 					message += "\n";
 					
-					//only for xdrip type of device, the status will be shown, because peripheralConnected is usually not connected for Dexcom (or other alike)
+					//only for xdrip, miaomiao, bluereader, blucon, transmiter pl type of device, the status will be shown, because peripheralConnected is usually not connected for Dexcom (or other alike)
 					//and peripheralConnectionStatusChangeTimestamp is not being set for Dexcom (or other alike)
 					if (peripheralConnected) {
 						message += ModelLocator.resourceManagerInstance.getString('homeview','connected');
@@ -664,7 +726,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 							batteryLevel = ModelLocator.resourceManagerInstance.getString('homeview','unknown');
 							message += " " + batteryLevel;
 						} else {
-							message += G4Model.TransmitterStatus.getBatteryLevel(new Number(batteryLevel));
+							message += " " + G4Model.TransmitterStatus.getBatteryLevel(new Number(batteryLevel));
 						}
 					} else if (BlueToothDevice.isBlueReader()) {
 						message += ModelLocator.resourceManagerInstance.getString('homeview','battery_level');
@@ -673,7 +735,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 							batteryLevel = ModelLocator.resourceManagerInstance.getString('homeview','unknown');
 							message += " " + batteryLevel;
 						} else {
-							message += (new Number(CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_BLUEREADER_BATTERY_LEVEL)))/1000;
+							message += " " + (new Number(CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_BLUEREADER_BATTERY_LEVEL)))/1000;
+						}
+						
+					} else if (BlueToothDevice.isTransmiter_PL()) {
+						message += ModelLocator.resourceManagerInstance.getString('homeview','battery_level');
+						var batteryLevel:String = CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_BLUEREADER_BATTERY_LEVEL);
+						if (batteryLevel == "0") {
+							batteryLevel = ModelLocator.resourceManagerInstance.getString('homeview','unknown');
+							message += " " + batteryLevel;
+						} else {
+							message += " " + (new Number(CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_BLUEREADER_BATTERY_LEVEL))) + " %";
 						}
 						
 					} else if (BlueToothDevice.isBluKon()) {
@@ -683,23 +755,35 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 							batteryLevel = ModelLocator.resourceManagerInstance.getString('homeview','unknown');
 							message += " " + batteryLevel;
 						} else {
-							message += (new Number(CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_BLUKON_BATTERY_LEVEL)))/1000;
+							message += " " + new Number(CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_BLUKON_BATTERY_LEVEL)) + " %";
+						}
+					} else if (BlueToothDevice.isMiaoMiao()) {
+						message += ModelLocator.resourceManagerInstance.getString('homeview','battery_level');
+						var batteryLevel:String = CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_MIAOMIAO_BATTERY_LEVEL);
+						if (batteryLevel == "0") {
+							batteryLevel = ModelLocator.resourceManagerInstance.getString('homeview','unknown');
+							message += " " + batteryLevel;
+						} else {
+							message += " " + new Number(CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_MIAOMIAO_BATTERY_LEVEL)) + " %";
 						}
 					}
 					
-					if (BlueToothDevice.isBluKon() || BlueToothDevice.isBlueReader()) {
+					if (BlueToothDevice.isBluKon() || BlueToothDevice.isBlueReader() || BlueToothDevice.isTransmiter_PL() || BlueToothDevice.isMiaoMiao()) {
 						message += '\n';
 						message += ModelLocator.resourceManagerInstance.getString('homeview','sensor_age');
 						var sensorAge:String = CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_FSL_SENSOR_AGE);
 						if (sensorAge == "0") {
 							sensorAge = ModelLocator.resourceManagerInstance.getString('homeview','unknown');
 							message += " " + sensorAge;
+						} else if ((new Number(sensorAge)) > 14.5 * 24 * 60) {
+							sensorAge = ModelLocator.resourceManagerInstance.getString('homeview','sensor_expired');
+							message += " " + sensorAge;
 						} else {
 							var sensorAgeInDays:int = (new Number(CommonSettings.getCommonSetting(CommonSettings.COMMON_SETTING_FSL_SENSOR_AGE)))/1440;
-							message += " "+ sensorAgeInDays + " " + ModelLocator.resourceManagerInstance.getString('homeview','days');
+							message += " " + sensorAgeInDays + " " + ModelLocator.resourceManagerInstance.getString('homeview','days');
 						}
 					}
-					
+
 					DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString('homeview',"status_title"),
 						message, 60);
 				}
@@ -725,7 +809,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 				);
 				dateTime.addEventListener(DialogViewEvent.CLOSED, date_closedRequestHandler);
 				dateTime.addEventListener(DialogDateTimeEvent.SELECTED, date_selectedHandler);
-				//dateTime.addEventListener(DialogDateTimeEvent.CHANGED, dateTime_changedHandler);Not needed, this is triggered whenever the user clicks another date, but hasn't closed
 				DialogService.addDialog(dateTime);
 			}
 			
@@ -767,7 +850,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 				);
 				dateTime.addEventListener(DialogViewEvent.CLOSED, time_closedRequestHandler);
 				dateTime.addEventListener(DialogDateTimeEvent.SELECTED, time_selectedHandler);
-				//dateTime.addEventListener(DialogDateTimeEvent.CHANGED, dateTime_changedHandler);Not needed, this is triggered whenever the user clicks another date, but hasn't closed
 				DialogService.addDialog(dateTime);
 			}
 			
@@ -836,39 +918,38 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 				}
 			}
 			
-			private static function checkApplicationVersion(event:Event = null):void {
-				var newVersion:String = ModelLocator.resourceManagerInstance.getString('general',"version");
-				var currentVersion:String = LocalSettings.getLocalSetting(LocalSettings.LOCAL_SETTING_APPLICATION_VERSION);
-				if (currentVersion < newVersion) {
-					if (currentVersion <= '0.0.46') {
-						DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString('homeview',"info"),
-							ModelLocator.resourceManagerInstance.getString('homeview',"info_additional_calibration_request_alert"));
-					}
-					if (currentVersion <= '0.0.53') {
-						DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString('homeview',"info"),
-							ModelLocator.resourceManagerInstance.getString('homeview',"info_app_not_always_on_anymore"));
-					}
-					LocalSettings.setLocalSetting(LocalSettings.LOCAL_SETTING_APPLICATION_VERSION, newVersion); 
-				}
-			}
-			
-			private static function addToChartValues(bgReading:BgReading):void {
-				if (bgReading == null)
+			private static function addToChartValues(bgReading:BgReading, callResetChartValuesIfNecessary:Boolean = true):void {
+				if (bgReading == null) {
+					myTrace("in addToChartValues, bgreading = null");
 					return;
+				}
 				if ((new Date()).valueOf() - bgReading.timestamp > hoursToShowInChart * 60 * 60 * 1000) {
+					myTrace("in addToChartValues, bgreading timestamp > hoursToShowInChart * 60 * 60 * 1000");
 					return;
 				}
+				
 				if (chartValues == null)
 					chartValues = new ArrayCollection();
 				if (chartValues.length == 0) {
 					chartValues.addItem(bgReading);
 				} else {
+					//for miaomiao, if there's gaps, then do a resetchart
+					var timeStampPreviousReading:Number = (chartValues.getItemAt(chartValues.length - 1)).timestamp;
+					var timeStampOfBgReading:Number = bgReading.timestamp;
+					if ((timeStampOfBgReading - timeStampPreviousReading > (5 + 2) * 60 * 1000) && callResetChartValuesIfNecessary) {
+						myTrace("in addToChartValues, resetting chartvalue because there's a gap");
+						resetChartValues();
+						return;
+					}
+					
 					if (!(bgReading.timestamp > (chartValues.getItemAt(chartValues.length - 1)).timestamp)) {
+						myTrace("in addToChartValues, bgreading timestamp < (chartValues.getItemAt(chartValues.length - 1)).timestamp, not processed");
 						//it's an old reading, this may happen eg when sensor has been stopped, lastNoSensor is called, but this returns the last reading with calculated value not 0
 						//If a sensor is stopped, the app keeps receiving readings, and hence this function is called, but bgreading is an older reading
 						return;
 					}
 
+					//myTrace("in addToChartValues with bgReading timestamp = " + (new Date(bgReading.timestamp)).toLocaleString());
 					//first if length is already > amount expected, remove those
 					//this can be more than 1 because we're adding some in call to completeChartValues
 					while (chartValues.length > hoursToShowInChart * 12) {
@@ -887,8 +968,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 					}
 					
 					//fill up gaps if any
-					var timeStampPreviousReading:Number = (chartValues.getItemAt(chartValues.length - 1)).timestamp;
-					var timeStampOfBgReading:Number = bgReading.timestamp;
 					var newItem:Object
 					while (timeStampOfBgReading - timeStampPreviousReading > (5 + 2) * 60 * 1000) {
 						timeStampPreviousReading += 5 * 60 * 1000;
@@ -998,7 +1077,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 				for (var cntr:int = 0; cntr < ModelLocator.bgReadings.length; cntr++) {
 					var reading:BgReading = ModelLocator.bgReadings.getItemAt(cntr) as BgReading;
 					if (reading.timestamp >= ((new Date()).valueOf() - hoursToShowInChart * 60 * 60 * 1000)) {
-						addToChartValues(reading);
+						addToChartValues(reading, false);
 					}
 				}
 				completeChartValues();
@@ -1040,13 +1119,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 				if (!largeBGLabelGroup.includeInLayout)
 					return;
 				if (largeBGLabel.width > 1 * iosxdripreader.deviceScreenWidth) {
-					//myTrace("in largeBGLabel_updateCompleteHandler, decreasing fontSizeForLargeBGLabel");
 					fontSizeForLargeBGLabel = fontSizeForLargeBGLabel * 0.9;
 				} else if (largeBGLabel.width < 0.9 * iosxdripreader.deviceScreenWidth) {
 					if (largeBGLabel.height < 0.95 * largeBGLabelGroup.height) {
 						fontSizeForLargeBGLabel = fontSizeForLargeBGLabel * 1.1;
-						//myTrace("in largeBGLabel_updateCompleteHandler, increasing fontSizeForLargeBGLabel to " + fontSizeForLargeBGLabel + ", largeBGLabel.height = " + largeBGLabel.height + ", largebglabelgroup.height= " + largeBGLabelGroup.height);
-						//myTrace("labelheight = " + largeBGLabel.height);
 					}
 				}  
 			}
@@ -1076,10 +1152,117 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 				}
 			}
 			
+			private function preSnoozeButtonClicked(event:MouseEvent):void {
+				var preSnoozeAlertBuilder:AlertBuilder = new AlertBuilder();
+				var snoozedString:String = ModelLocator.resourceManagerInstance.getString("homeview","snoozed");
+				preSnoozeAlertBuilder.setTitle(ModelLocator.resourceManagerInstance.getString("homeview","pre_or_unsnooze_alert"));
+				preSnoozeAlertBuilder.setMessage(ModelLocator.resourceManagerInstance.getString("homeview","select_alert_to_pre_or_unsnooze"));
+				preSnoozeAlertBuilder.addOption(ModelLocator.resourceManagerInstance.getString("homeview","very_low") + (AlarmService.veryLowAlertSnoozed() ? (" (" + snoozedString + ")"):""), DialogAction.STYLE_DEFAULT, 1);
+				preSnoozeAlertBuilder.addOption(ModelLocator.resourceManagerInstance.getString("homeview","low") + (AlarmService.lowAlertSnoozed() ? (" (" + snoozedString + ")"):""), DialogAction.STYLE_DEFAULT, 2);
+				preSnoozeAlertBuilder.addOption(ModelLocator.resourceManagerInstance.getString("homeview","high") + (AlarmService.highAlertSnoozed() ? (" (" + snoozedString + ")"):""), DialogAction.STYLE_DEFAULT, 3);
+				preSnoozeAlertBuilder.addOption(ModelLocator.resourceManagerInstance.getString("homeview","very_high") + (AlarmService.veryHighAlertSnoozed() ? (" (" + snoozedString + ")"):""), DialogAction.STYLE_DEFAULT, 4);
+				preSnoozeAlertBuilder.addOption(ModelLocator.resourceManagerInstance.getString("homeview","missed_reading") + (AlarmService.missedReadingAlertSnoozed() ? (" (" + snoozedString + ")"):""), DialogAction.STYLE_DEFAULT, 5);
+				preSnoozeAlertBuilder.addOption(ModelLocator.resourceManagerInstance.getString("homeview","phone_muted") + (AlarmService.phoneMutedAlertSnoozed() ? (" (" + snoozedString + ")"):""), DialogAction.STYLE_DEFAULT, 6);
+				preSnoozeAlertBuilder.addOption(ModelLocator.resourceManagerInstance.getString("general","cancel"), DialogAction.STYLE_CANCEL, 0);
+				var preSnoozeDialogView:DialogView = Dialog.service.create(preSnoozeAlertBuilder.build());
+				preSnoozeDialogView.addEventListener(DialogViewEvent.CLOSED, preSnoozeDialogViewClosedHandler);
+				preSnoozeDialogView.show();
+			}
+			
+			private function preSnoozeDialogViewClosedHandler(event:DialogViewEvent):void {
+				var snoozeOverviewAlertBuilder:AlertBuilder;
+				if (event.index > 0) {
+					snoozeOverviewAlertBuilder = new AlertBuilder();
+					snoozeOverviewAlertBuilder.addOption(ModelLocator.resourceManagerInstance.getString("general","cancel"), DialogAction.STYLE_CANCEL, 0);
+				}
+				if (event.index == 1) {
+					if (AlarmService.veryLowAlertSnoozed()) {
+						snoozeOverviewAlertBuilder.setTitle(ModelLocator.resourceManagerInstance.getString("homeview","very_low_alert_snoozed_for") + " " + AlarmService.veryLowAlertSnoozeAsString());
+						snoozeOverviewAlertBuilder.addOption(ModelLocator.resourceManagerInstance.getString("homeview","unsnooze"), DialogAction.STYLE_DEFAULT, 1);
+					} else {
+						snoozeOverviewAlertBuilder.setTitle(ModelLocator.resourceManagerInstance.getString("homeview","very_low_alert_not_snoozed"));
+						snoozeOverviewAlertBuilder.addOption(ModelLocator.resourceManagerInstance.getString("homeview","presnooze"), DialogAction.STYLE_DEFAULT, 2);
+					}
+				} else if (event.index == 2) {
+					if (AlarmService.lowAlertSnoozed()) {
+						snoozeOverviewAlertBuilder.setTitle(ModelLocator.resourceManagerInstance.getString("homeview","low_alert_snoozed_for") + " "  + AlarmService.lowAlertSnoozeAsString());
+						snoozeOverviewAlertBuilder.addOption(ModelLocator.resourceManagerInstance.getString("homeview","unsnooze"), DialogAction.STYLE_DEFAULT, 3);
+					} else {
+						snoozeOverviewAlertBuilder.setTitle(ModelLocator.resourceManagerInstance.getString("homeview","low_alert_not_snoozed"));
+						snoozeOverviewAlertBuilder.addOption(ModelLocator.resourceManagerInstance.getString("homeview","presnooze"), DialogAction.STYLE_DEFAULT, 4);
+					}
+				} else if (event.index == 3) {
+					if (AlarmService.highAlertSnoozed()) {
+						snoozeOverviewAlertBuilder.setTitle(ModelLocator.resourceManagerInstance.getString("homeview","high_alert_snoozed_for") + " "  + AlarmService.highAlertSnoozeAsString());
+						snoozeOverviewAlertBuilder.addOption(ModelLocator.resourceManagerInstance.getString("homeview","unsnooze"), DialogAction.STYLE_DEFAULT, 5);
+					} else {
+						snoozeOverviewAlertBuilder.setTitle(ModelLocator.resourceManagerInstance.getString("homeview","high_alert_not_snoozed"));
+						snoozeOverviewAlertBuilder.addOption(ModelLocator.resourceManagerInstance.getString("homeview","presnooze"), DialogAction.STYLE_DEFAULT, 6);
+					}
+				} else if (event.index == 4) {
+					if (AlarmService.veryHighAlertSnoozed()) {
+						snoozeOverviewAlertBuilder.setTitle(ModelLocator.resourceManagerInstance.getString("homeview","very_high_alert_snoozed_for") + " "  + AlarmService.veryHighAlertSnoozeAsString());
+						snoozeOverviewAlertBuilder.addOption(ModelLocator.resourceManagerInstance.getString("homeview","unsnooze"), DialogAction.STYLE_DEFAULT, 7);
+					} else {
+						snoozeOverviewAlertBuilder.setTitle(ModelLocator.resourceManagerInstance.getString("homeview","very_high_alert_not_snoozed"));
+						snoozeOverviewAlertBuilder.addOption(ModelLocator.resourceManagerInstance.getString("homeview","presnooze"), DialogAction.STYLE_DEFAULT, 8);
+					}
+				} else if (event.index == 5) {
+					if (AlarmService.missedReadingAlertSnoozed()) {
+						snoozeOverviewAlertBuilder.setTitle(ModelLocator.resourceManagerInstance.getString("homeview","missed_reading_alert_snoozed_for") + " "  + AlarmService.missedReadingAlertSnoozeAsString());
+						snoozeOverviewAlertBuilder.addOption(ModelLocator.resourceManagerInstance.getString("homeview","unsnooze"), DialogAction.STYLE_DEFAULT, 9);
+					} else {
+						snoozeOverviewAlertBuilder.setTitle(ModelLocator.resourceManagerInstance.getString("homeview","missed_reading_alert_not_snoozed"));
+						snoozeOverviewAlertBuilder.addOption(ModelLocator.resourceManagerInstance.getString("homeview","presnooze"), DialogAction.STYLE_DEFAULT, 10);
+					}
+				} else if (event.index == 6) {
+					if (AlarmService.phoneMutedAlertSnoozed()) {
+						snoozeOverviewAlertBuilder.setTitle(ModelLocator.resourceManagerInstance.getString("homeview","phone_muted_alert_snoozed_for") + " "  + AlarmService.phoneMutedAlertSnoozeAsString());
+						snoozeOverviewAlertBuilder.addOption(ModelLocator.resourceManagerInstance.getString("homeview","unsnooze"), DialogAction.STYLE_DEFAULT, 11);
+					} else {
+						snoozeOverviewAlertBuilder.setTitle(ModelLocator.resourceManagerInstance.getString("homeview","phone_muted_alert_not_snoozed"));
+						snoozeOverviewAlertBuilder.addOption(ModelLocator.resourceManagerInstance.getString("homeview","presnooze"), DialogAction.STYLE_DEFAULT, 12);
+					}
+				}
+				if (event.index > 0) {
+					var cancelOrPreSnoozeDialogView:DialogView = Dialog.service.create(snoozeOverviewAlertBuilder.build());
+					cancelOrPreSnoozeDialogView.addEventListener(DialogViewEvent.CLOSED, cancelOrPreSnoozeDialogViewClosedHandler);
+					cancelOrPreSnoozeDialogView.show();
+				}
+			}
+			
+			private function cancelOrPreSnoozeDialogViewClosedHandler(event:DialogViewEvent):void {
+				if (event.index == 1) {
+					AlarmService.resetVeryLowAlert();
+				} else if (event.index == 2) {
+					AlarmService.openVeryLowAlertSnoozePickerDialog(true);
+				} else if (event.index == 3) {
+					AlarmService.resetLowAlert();
+				} else if (event.index == 4) {
+					AlarmService.openLowAlertSnoozePickerDialog(true);
+				} else if (event.index == 5) {
+					AlarmService.resetHighAlert();
+				} else if (event.index == 6) {
+					AlarmService.openHighAlertSnoozePickerDialog(true);
+				} else if (event.index == 7) {
+					AlarmService.resetVeryHighAlert();
+				} else if (event.index == 8) {
+					AlarmService.openVeryHighAlertSnoozePickerDialog(true);
+				} else if (event.index == 9) {
+					AlarmService.resetMissedReadingAlert();
+				} else if (event.index == 10) {
+					AlarmService.openMissedReadingAlertSnoozePickerDialog(true);
+				} else if (event.index == 11) {
+					AlarmService.resetPhoneMutedAlert();
+				} else if (event.index == 12) {
+					AlarmService.openPhoneMutedAlertSnoozePickerDialog(true);
+				}
+			}
 		]]>
 	</fx:Script>
 	<s:actionContent>
-		<s:Button id="devicetypebutton" icon="../assets/bluetooth.png" click="deviceTypeButtonClicked(event)"/>
+		<s:Button icon="{ModelLocator.imageBell}" id="presnoozeicon" click="preSnoozeButtonClicked(event)" enabled="true" alpha="1"/>
+		<s:Button id="bluetoothbutton" icon="{ModelLocator.imageBluetooth}" alpha="{_bluetoothButtonActive ? 1:0.25}" enabled="{_bluetoothButtonActive}" click="deviceTypeButtonClicked(event)"/>
 		<s:Button icon="{ModelLocator.image_calibrate_active}" id="calibrateButton" alpha="{_calibrateButtonActive ? 1:0.25}" enabled="{_calibrateButtonActive}" click="calibrationButtonClicked(event)"/>
 	</s:actionContent>
 	
@@ -1105,6 +1288,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 					</s:layout>
 					<s:Label id = "minutesAgoLabelId" text="{minutesAgoText}"/>
 					<s:Label id = "deltaValueLabelId" text="{deltaValueText}"/>
+					<s:Label id = "batteryLevelId" text="{batteryLevelText}"/>
 				</s:Group>
 			</s:Group>
 			<s:Label id = "currentBgLabel" text="{currentBgLabelText}" fontSize="60" lineThrough="{currentBgLabellinethrough}" color="{currentBgLabelColor}"/>

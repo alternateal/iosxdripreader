@@ -17,14 +17,15 @@
  */
 package events
 {
+	import flash.events.Event;
+
 	[Event(name="BGReadingEvent",type="events.TransmitterServiceEvent")]
-	[Event(name="TransmitterServiceInformation",type="events.TransmitterServiceEvent")]
 	
 	/**
 	 * used by transmitter service to notify on all kinds of events : information messages, etc.. <br>
 	 */
 	
-	public class TransmitterServiceEvent extends GenericEvent
+	public class TransmitterServiceEvent extends Event
 	{
 		/**
 		 * event to inform that there's a new bgreading available<br>
@@ -32,12 +33,6 @@ package events
 		 * There's no data attached to it.
 		 */
 		public static const BGREADING_EVENT:String = "BGReadingEvent";
-		/**
-		 * To pass status information, this is just text that can be shown to the user to display progress info<br>
-		 * data.information will be a string with this info. 
-		 */
-		public static const TRANSMITTER_SERVICE_INFORMATION_EVENT:String = "TransmitterServiceInformation";
-
 		
 		public var data:*;
 

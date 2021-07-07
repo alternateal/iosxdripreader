@@ -32,11 +32,16 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 			import com.distriqt.extension.dialog.builders.PickerDialogBuilder;
 			import com.distriqt.extension.dialog.events.DialogViewEvent;
 			import com.distriqt.extension.dialog.objects.DialogAction;
+			import com.freshplanet.ane.AirBackgroundFetch.BackgroundFetch;
 			
 			import mx.collections.ArrayCollection;
 			import mx.events.FlexEvent;
+			import mx.utils.StringUtil;
+			
+			import Utilities.FromtimeAndValueArrayCollection;
 			
 			import databaseclasses.AlertType;
+			import databaseclasses.CommonSettings;
 			import databaseclasses.Database;
 			
 			import model.ModelLocator;
@@ -63,6 +68,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 			private var resetColorTimer:Timer;
 			private var alertTypeChanged:Boolean;
 			private var selectedIndex:int;
+			private var previousAlertTypeName:String = "";
 			
 			/**
 			 * this is the default value for 5 minutes, to be used as repeat interval<br>
@@ -91,10 +97,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 				soundName = alertType.sound;
 				if (soundName == "no_sound")
 					soundName = ModelLocator.resourceManagerInstance.getString("alerttypeview","no_sound");
-				if (soundName == "default") {
-					var sounds:String = ModelLocator.resourceManagerInstance.getString("alerttypeview","sound_names_as_displayed_can_be_translated_must_match_above_list");
-					var soundsSplitted:Array = sounds.split(',');
-					soundName = soundsSplitted[0];
+				if (soundName == "default") {//for backward compatibility, default sound is removed as of 2.2.5
+					soundName = ModelLocator.resourceManagerInstance.getString("alerttypeview","default_sound_as_displayed");
 				}
 				if (alarmEnabled) {
 					soundgroup.alpha = 1;
@@ -197,8 +201,16 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 							}
 						}
 					}
+					
+					if ((event.values[0] as String).indexOf("-") > -1) {
+						DialogService.openSimpleDialog(ModelLocator.resourceManagerInstance.getString("alerttypeview","alarm_name_invalid"),
+							ModelLocator.resourceManagerInstance.getString("alerttypeview","alarm_name_should_not_have_dash"));
+						return;
+					}
+					
 					if (alarmName != (event.values[0] as String)) {
 						alertTypeChanged = true;
+						previousAlertTypeName = alarmName;
 						alarmName = event.values[0] as String;
 					}
 				}
@@ -277,13 +289,16 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 				rect12.color = uint("0xD3D3D3");
 				setResetColorTimer();
 
+				var soundsAsStoredInAssets:String = ModelLocator.resourceManagerInstance.getString("alerttypeview","sound_names_as_in_assets_no_translation_needed_comma_seperated");
+				var soundsAsStoredInAssetsSplitted:Array = soundsAsStoredInAssets.split(',');
+
 				var selectedSound:int = 0;
 				var soundNames:Array = new Array();
-				var sounds:String = ModelLocator.resourceManagerInstance.getString("alerttypeview","sound_names_as_displayed_can_be_translated_must_match_above_list");
-				var soundsSplitted:Array = sounds.split(',');
+				var soundsAsDisplayed:String = ModelLocator.resourceManagerInstance.getString("alerttypeview","sound_names_as_displayed_can_be_translated_must_match_above_list");
+				var soundsAsDisplayedSplitted:Array = soundsAsDisplayed.split(',');
 				soundNames.push(ModelLocator.resourceManagerInstance.getString("alerttypeview","no_sound"));
-				for (var cntr:int = 0;cntr < soundsSplitted.length;cntr++) {
-					var newSound:String = soundsSplitted[cntr];
+				for (var cntr:int = 0;cntr < soundsAsDisplayedSplitted.length;cntr++) {
+					var newSound:String = soundsAsDisplayedSplitted[cntr];
 					if (newSound.length > 0) {
 						soundNames.push(newSound);
 						if (newSound.toUpperCase() == soundName.toUpperCase())
@@ -301,14 +316,38 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 				);
 				
 				picker.addEventListener( DialogViewEvent.CLOSED, picker_closedHandler );
+				picker.addEventListener(DialogViewEvent.CHANGED, picker_changedHandler);
+				picker.addEventListener(DialogViewEvent.CANCELLED, picker_canceledHandler);
 				picker.show();
 				
+				function picker_canceledHandler(event:DialogViewEvent):void {
+					BackgroundFetch.stopPlayingSound();
+				}
+				
+				function picker_changedHandler(event:DialogViewEvent):void {
+					BackgroundFetch.stopPlayingSound();
+
+					var newSoundName:String = event.values[0];
+					var soundInList:String;
+					if (newSoundName == ModelLocator.resourceManagerInstance.getString("alerttypeview","no_sound")) {
+					} else {
+						for (var cntr:int = 0;cntr < soundsAsDisplayedSplitted.length;cntr++) {
+							soundInList = soundsAsDisplayedSplitted[cntr];
+							if (soundInList == newSoundName) {
+								BackgroundFetch.playSound(soundsAsStoredInAssetsSplitted[cntr]);
+								break;
+							}
+						}
+					}
+				}
+				
 				function picker_closedHandler(event:DialogViewEvent): void {
+					BackgroundFetch.stopPlayingSound();
 					var newSoundName:String = event.values[0];
 					if (soundName == newSoundName)
 						return;
 					
-					soundName = newSoundName;
+					soundName = StringUtil.trim(newSoundName);//using trim because during tests sometimes the soundname had a preceding white space
 					alertTypeChanged = true;					
 				}
 			}
@@ -371,8 +410,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 				var neworExistingAlertType:AlertType; 
 				if (soundName == ModelLocator.resourceManagerInstance.getString("alerttypeview","no_sound"))
 					soundName = "no_sound";
-				if (soundName == ModelLocator.resourceManagerInstance.getString("alerttypeview","default_sound_as_displayed"))
-					soundName = "default";
 				if (alertTypeInDatabase != null) {
 					neworExistingAlertType = new AlertType(
 						alertTypeInDatabase.uniqueId, 
@@ -402,6 +439,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 						repeatInMinutes);
 					Database.insertAlertTypeSychronous(neworExistingAlertType);
 				}
+				if (previousAlertTypeName != "") {
+					if (previousAlertTypeName != alarmName) {
+						AlertType.alertTypeUsed(previousAlertTypeName, alarmName);
+						previousAlertTypeName  = "";
+					}
+				}
+
 				navigator.popView();
 			}
 		]]>

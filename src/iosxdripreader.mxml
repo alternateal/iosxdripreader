@@ -19,7 +19,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 <s:TabbedViewNavigatorApplication xmlns:fx="http://ns.adobe.com/mxml/2009" 
 								  xmlns:s="library://ns.adobe.com/flex/spark" 
 								  applicationDPI="160"
-								  splashScreenImage="@Embed('assets/splash.png')"
 								  activate="activateHandler(event)"
 								  initialize="initApplication()">
 	
@@ -31,8 +30,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 			import Utilities.Trace;
 			
 			import events.IosXdripReaderEvent;
-			
-			import model.ModelLocator;
 			
 			import services.DialogService;
 			
@@ -66,8 +63,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.txt>.
 			
 			protected function activateHandler(event:Event):void
 			{
-				ModelLocator.isInForeground = true;
-				myTrace("setting ModelLocator.isInForeground = true and dispatching event IosXdripReaderEvent.APP_IN_FOREGROUND");
+				myTrace("dispatching event IosXdripReaderEvent.APP_IN_FOREGROUND");
 				dispatchEvent(new IosXdripReaderEvent(IosXdripReaderEvent.APP_IN_FOREGROUND));
 			}
 			
